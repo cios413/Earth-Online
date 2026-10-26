@@ -1,0 +1,32 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ARPrototype.Runtime", "ARPrototype.Runtime.csproj", "{482331C2-5EB8-96D2-76D6-CB1EC2EA9F3B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ARPrototype.PlayModeTests", "ARPrototype.PlayModeTests.csproj", "{050E4A7A-AB1B-6939-C846-3D0DE02800AB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ARPrototype.Editor", "ARPrototype.Editor.csproj", "{47BF2472-DB71-F178-A43A-9A7F07CC56BB}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{482331C2-5EB8-96D2-76D6-CB1EC2EA9F3B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{482331C2-5EB8-96D2-76D6-CB1EC2EA9F3B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{482331C2-5EB8-96D2-76D6-CB1EC2EA9F3B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{482331C2-5EB8-96D2-76D6-CB1EC2EA9F3B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{050E4A7A-AB1B-6939-C846-3D0DE02800AB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{050E4A7A-AB1B-6939-C846-3D0DE02800AB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{050E4A7A-AB1B-6939-C846-3D0DE02800AB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{050E4A7A-AB1B-6939-C846-3D0DE02800AB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{47BF2472-DB71-F178-A43A-9A7F07CC56BB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{47BF2472-DB71-F178-A43A-9A7F07CC56BB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{47BF2472-DB71-F178-A43A-9A7F07CC56BB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{47BF2472-DB71-F178-A43A-9A7F07CC56BB}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
