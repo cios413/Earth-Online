@@ -185,3 +185,47 @@ Unity.exe -batchmode -quit -projectPath "<工程路径>" -buildTarget Android ^
 打开着 `PokeDeformer.LogPokes`（在 `PokeDeformBootstrap` 里设为 `true`），每次戳都会打一条
 `[Poke]` 日志；确认没问题后把那一行删掉即可关闭。
 
+
+---
+
+# 克隆后如何继续加工（必读）
+
+## 1. 必做：导出模型权重（权重未入库）
+
+`Assets/Resources/Models/yolov8n.onnx` **不在仓库里**（12 MB 二进制，避免拖慢拉取）。拉下来后先导出：
+
+```powershell
+pip install ultralytics
+yolo export model=yolov8n.pt format=onnx opset=9 imgsz=416 simplify=True
+copy yolov8n.onnx "Assets\Resources\Models\yolov8n.onnx"
+```
+
+**三个参数不能改**，否则 Barracuda 导入失败：
+
+| 参数 | 值 | 原因 |
+| --- | --- | --- |
+| `opset` | **9** | YOLOv8 默认 opset 12 的算子 Barracuda 2.0.0 不支持 |
+| `simplify` | **True** | 简化后的图才能被 Barracuda 导入 |
+| `imgsz` | **416** | 必须与 `YoloPersonDetector.InputSize` 一致，改尺寸要两边同步 |
+
+`com.unity.barracuda` 必须是 **2.0.0**（3.0 已移除 ONNX 导入）。
+
+## 2. 必做：换成自己的 Vuforia License Key
+
+`Assets/Resources/VuforiaConfiguration.asset` 里的 key 绑定包名 `com.DefaultCompany.Myproject`，
+别人用会初始化失败。到 [developer.vuforia.com](https://developer.vuforia.com) 免费申请，
+填相同包名即可，然后替换 `vuforiaLicenseKey`。
+
+## 3. 环境要求
+
+- Unity **2022.3.62f3c1**
+- Android：**IL2CPP / ARM64 / minSdk 29**
+- Active Input Handling：**仅 Input System（New）** —— 旧的 `Input.touchCount` 会抛异常
+- 首次打开需联网（解析 Vuforia scoped registry + Barracuda）
+
+## 4. 已知问题 / 待办
+
+- 选中后的代理体是**隐形投影面**（静止时与背景一致），锁定后缺少可见边界提示；
+- 锁定目标后没有"取消选中/换目标"入口；
+- 人检测 416 在真机约 **300 ms/帧**，扫描间隔 1.5 s，FPS 会周期性下降；
+- 物体不做自动识别，由手指点选指定。
