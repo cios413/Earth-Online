@@ -1,6 +1,0 @@
-{
-  "name": "ARPrototype.Runtime",
-  "rootNamespace": "ARPrototype",
-  "references": ["Unity.XR.ARFoundation", "Unity.XR.CoreUtils", "UnityEngine.SpatialTracking", "Unity.ugui"],
-  "autoReferenced": true
-}

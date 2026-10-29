@@ -1,7 +1,0 @@
-{
-  "name": "ARPrototype.Editor",
-  "rootNamespace": "ARPrototype.Editor",
-  "references": ["ARPrototype.Runtime", "Unity.XR.ARFoundation", "Unity.XR.CoreUtils", "UnityEngine.SpatialTracking", "Unity.XR.Management", "Unity.XR.Management.Editor", "UnityEditor.TestRunner", "UnityEngine.TestRunner"],
-  "includePlatforms": ["Editor"],
-  "autoReferenced": true
-}

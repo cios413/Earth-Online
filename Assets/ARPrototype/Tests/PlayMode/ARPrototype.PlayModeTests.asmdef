@@ -1,6 +1,0 @@
-{
-  "name": "ARPrototype.PlayModeTests",
-  "references": ["ARPrototype.Runtime"],
-  "optionalUnityReferences": ["TestAssemblies"],
-  "autoReferenced": false
-}

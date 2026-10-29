@@ -23,3 +23,9 @@ Thumbs.db
 
 # Unity crash reports
 sysinfo.txt
+
+# Vuforia 安装包不入库（manifest 走 scoped registry 解析）
+Packages/com.ptc.vuforia.engine-*.tgz
+
+# 模型权重不入库：用 tools/export_model.ps1 或 README 里的命令重新导出
+Assets/Resources/Models/*.onnx
