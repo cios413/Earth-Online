@@ -1,0 +1,64 @@
+{
+  "items": [
+    {
+      "key": "StickyHand",
+      "displayName": "1号 · 粘粘手",
+      "sourceCollection": "Sticky Hand",
+      "longestSide": 0.24,
+      "objects": [
+        {
+          "objectName": "StickyHand_0",
+          "texture": "StickyHand_0_BaseColor.png",
+          "smoothness": 0.5,
+          "metallic": 0.0,
+          "alpha": 0.8772727251052856
+        }
+      ]
+    },
+    {
+      "key": "Brain",
+      "displayName": "2号 · 大脑",
+      "sourceCollection": "Human Brain",
+      "longestSide": 0.24,
+      "objects": [
+        {
+          "objectName": "Brain_0",
+          "texture": "Brain_0_BaseColor.png",
+          "smoothness": 0.872727245092392,
+          "metallic": 0.0,
+          "alpha": 1.0
+        }
+      ]
+    },
+    {
+      "key": "JellyCube",
+      "displayName": "3号 · 方块",
+      "sourceCollection": "@立方体.001",
+      "longestSide": 0.36,
+      "objects": [
+        {
+          "objectName": "JellyCube_0",
+          "texture": "JellyCube_0_BaseColor.png",
+          "smoothness": 0.9500000029802322,
+          "metallic": 0.025316476821899414,
+          "alpha": 0.8
+        }
+      ]
+    },
+    {
+      "key": "Arrow",
+      "displayName": "4号 · 箭头",
+      "sourceCollection": "Arrow",
+      "longestSide": 0.44,
+      "objects": [
+        {
+          "objectName": "Arrow_0",
+          "texture": "Arrow_0_BaseColor.png",
+          "smoothness": 0.5,
+          "metallic": 0.0,
+          "alpha": 1.0
+        }
+      ]
+    }
+  ]
+}

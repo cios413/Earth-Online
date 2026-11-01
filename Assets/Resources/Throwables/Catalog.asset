@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b9b12d792f9b37f4ba8abc19970467d4, type: 3}
+  m_Name: Catalog
+  m_EditorClassIdentifier: 
+  entries:
+  - key: StickyHand
+    displayName: "1\u53F7 \xB7 \u7C98\u7C98\u624B"
+    prefab: {fileID: 6530664904230838955, guid: 2ef4d58941df75941b246ea2f4de1d7b, type: 3}
+    preview: {fileID: 2800000, guid: f88bfd6d02a2c8140a26e0cc008f2160, type: 3}
+  - key: Brain
+    displayName: "2\u53F7 \xB7 \u5927\u8111"
+    prefab: {fileID: 5922894621355493277, guid: fc841acf1eb17bf408398c1ebfdba6ef, type: 3}
+    preview: {fileID: 2800000, guid: dbf91ab97fa41434e847e54a2a3e7cdf, type: 3}
+  - key: JellyCube
+    displayName: "3\u53F7 \xB7 \u65B9\u5757"
+    prefab: {fileID: 2154705591769688489, guid: 75be0648aae844449b26624715b48f3b, type: 3}
+    preview: {fileID: 2800000, guid: f5c9c8a904d7ca0458b4b8d1e41fc14f, type: 3}
+  - key: Arrow
+    displayName: "4\u53F7 \xB7 \u7BAD\u5934"
+    prefab: {fileID: 4869882150816833615, guid: fbaaa9bd648c8cc4288313e0d096e284, type: 3}
+    preview: {fileID: 2800000, guid: 53d880d039cc4eb4497ae25f36cf52ea, type: 3}

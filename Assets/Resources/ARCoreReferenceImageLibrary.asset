@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 848409ee8ba454f42a5ddff137688a27, type: 3}
+  m_Name: ARCoreReferenceImageLibrary
+  m_EditorClassIdentifier: 
+  m_GuidLow: 5577866351961090221
+  m_GuidHigh: 10122293007288151444
+  m_DataStore:
+    m_Storage: []
+  m_Images:
+  - m_SerializedGuid:
+      m_GuidLow: 5676304146449430899
+      m_GuidHigh: 13460038499399892908
+    m_SerializedTextureGuid:
+      m_GuidLow: 5142803384439385363
+      m_GuidHigh: 4689773031872677291
+    m_Size: {x: 0.1125, y: 0.2}
+    m_SpecifySize: 1
+    m_Name: 3_scaled
+    m_Texture: {fileID: 2800000, guid: 2f2fad13e86e475eab45fa99b96b1541, type: 3}
+  - m_SerializedGuid:
+      m_GuidLow: 4891609622542459011
+      m_GuidHigh: 597553743104786838
+    m_SerializedTextureGuid:
+      m_GuidLow: 4884734946060763091
+      m_GuidHigh: 2587523047117913020
+    m_Size: {x: 0.1125, y: 0.2}
+    m_SpecifySize: 1
+    m_Name: 6_scaled
+    m_Texture: {fileID: 2800000, guid: 91e37fd3108d43cabc7b998780bae823, type: 3}
