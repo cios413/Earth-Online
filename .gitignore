@@ -24,8 +24,7 @@ Thumbs.db
 # Unity crash reports
 sysinfo.txt
 
-# Vuforia °²×°°ü²»Èë¿â£¨manifest ×ß scoped registry ½âÎö£©
+# Vuforia ï¿½ï¿½×°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½â£¨manifest ï¿½ï¿½ scoped registry ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 Packages/com.ptc.vuforia.engine-*.tgz
 
-# Ä£ÐÍÈ¨ÖØ²»Èë¿â£ºÓÃ tools/export_model.ps1 »ò README ÀïµÄÃüÁîÖØÐÂµ¼³ö
-Assets/Resources/Models/*.onnx
+# Ä£ï¿½ï¿½È¨ï¿½Ø²ï¿½ï¿½ï¿½â£ºï¿½ï¿½ tools/export_model.ps1 ï¿½ï¿½ README ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Âµï¿½ï¿½ï¿½
