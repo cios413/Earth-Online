@@ -14,7 +14,7 @@ namespace EarthOL.BodyThrow
     public sealed class BodyPoseTracker : MonoBehaviour
     {
         const int CaptureSize = 640;
-        const float ScanInterval = 0.16f;
+        const float ScanInterval = 0.5f;
         const float PoseLostGrace = 0.75f;
         const float DoubleTapInterval = 0.38f;
         const float DoubleTapDistance = 80f;

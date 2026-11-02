@@ -8,7 +8,7 @@ namespace EarthOL.BodyThrow
     /// <summary>YOLOv8-Pose decoder for one-person pose tracking.</summary>
     public sealed class BodyPoseDetector : System.IDisposable
     {
-        const int InputSize = 416;
+        const int InputSize = 256;
         const int KeypointCount = 17;
         const float ConfidenceThreshold = 0.25f;
         const float NmsThreshold = 0.45f;
@@ -35,7 +35,7 @@ namespace EarthOL.BodyThrow
             try
             {
                 m_Model = ModelLoader.Load(nnModel);
-                m_Worker = WorkerFactory.CreateWorker(WorkerFactory.Type.Auto, m_Model);
+                m_Worker = WorkerFactory.CreateWorker(WorkerFactory.Type.CSharp, m_Model);
                 Debug.Log("[Pose] YOLOv8-Pose 模型就绪：" + m_Worker.GetType().Name);
             }
             catch (System.Exception exception)
@@ -124,7 +124,7 @@ namespace EarthOL.BodyThrow
             var boxData = boxes.ToReadOnlyArray();
             var scoreData = scores.ToReadOnlyArray();
             var poseData = pose.ToReadOnlyArray();
-            const int anchors = 3549;
+            const int anchors = 1344;
             const int boxChannels = 64;
             const int poseChannels = 51;
 
@@ -239,26 +239,26 @@ namespace EarthOL.BodyThrow
 
         static void GetGridPoint(int anchor, out float x, out float y, out float stride)
         {
-            if (anchor < 2704)
+            if (anchor < 1024)
             {
                 stride = 8f;
                 int index = anchor;
-                x = index % 52 + 0.5f;
-                y = index / 52 + 0.5f;
+                x = index % 32 + 0.5f;
+                y = index / 32 + 0.5f;
             }
-            else if (anchor < 3380)
+            else if (anchor < 1280)
             {
                 stride = 16f;
-                int index = anchor - 2704;
-                x = index % 26 + 0.5f;
-                y = index / 26 + 0.5f;
+                int index = anchor - 1024;
+                x = index % 16 + 0.5f;
+                y = index / 16 + 0.5f;
             }
             else
             {
                 stride = 32f;
-                int index = anchor - 3380;
-                x = index % 13 + 0.5f;
-                y = index / 13 + 0.5f;
+                int index = anchor - 1280;
+                x = index % 8 + 0.5f;
+                y = index / 8 + 0.5f;
             }
         }
 
