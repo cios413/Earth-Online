@@ -11,6 +11,10 @@ namespace EarthOL.ARCore
         Camera m_Camera;
         BodyProxyRig m_Rig;
         BodyPoseTracker m_Tracker;
+        PersonTrackingManager m_PersonTracking;
+        PersonDistanceEstimator m_DistanceEstimator;
+        PoseDetectionManager m_DetectionManager;
+        int m_FocusedPersonId = -1;
         GameObject m_Surface;
         PokeWarpDeformer m_Warp;
         Renderer m_Renderer;
@@ -27,8 +31,23 @@ namespace EarthOL.ARCore
             m_Camera = camera;
             m_Rig = rig;
             m_Tracker = tracker;
+            CreateSurface();
+        }
+
+        public void Configure(Camera camera, PersonTrackingManager tracking,
+            PersonDistanceEstimator distanceEstimator, PoseDetectionManager detectionManager)
+        {
+            m_Camera = camera;
+            m_PersonTracking = tracking;
+            m_DistanceEstimator = distanceEstimator;
+            m_DetectionManager = detectionManager;
+            CreateSurface();
+        }
+
+        void CreateSurface()
+        {
             m_Surface = new GameObject("Person camera deformation region");
-            m_Surface.transform.SetParent(camera.transform, false);
+            m_Surface.transform.SetParent(m_Camera.transform, false);
             m_Surface.SetActive(false);
             m_Surface.layer = 2; // A visual overlay, excluded from ordinary pointer raycasts.
             m_Warp = m_Surface.AddComponent<PokeWarpDeformer>();
@@ -72,10 +91,12 @@ namespace EarthOL.ARCore
             else if (m_PointerHeld) EndPointer();
             m_Renderer.enabled = m_Surface.activeInHierarchy && m_Warp.HasActivePokes;
             if (m_Tracker != null) m_Tracker.DeformationGestureActive = m_PointerHeld || m_Warp.HasActivePokes;
+            if (m_DetectionManager != null) m_DetectionManager.SetInferencePaused(m_PointerHeld || m_Warp.HasActivePokes);
         }
 
         public bool RefreshRegion(float deltaTime)
         {
+            if (m_PersonTracking != null) return RefreshTrackedRegion(deltaTime);
             Rect desired = default;
             bool valid = m_Tracker != null && m_Tracker.HasPose && TryGetRegion(m_Camera, m_Rig, out desired);
             if (valid)
@@ -115,18 +136,95 @@ namespace EarthOL.ARCore
             return valid;
         }
 
+        bool RefreshTrackedRegion(float deltaTime)
+        {
+            PersonPoseData person = m_FocusedPersonId >= 0 ? m_PersonTracking.Find(m_FocusedPersonId) : BestPerson();
+            Rect desired = default;
+            bool valid = person != null && person.trackingConfidence > 0.1f && TryGetRegion(person, out desired);
+            if (valid && !m_Warp.HasActivePokes)
+            {
+                if (!m_RegionReady) m_Region = desired;
+                else
+                {
+                    float blend = 1f - Mathf.Exp(-Mathf.Max(0f, deltaTime) / 0.16f);
+                    m_Region = Rect.MinMaxRect(Mathf.Lerp(m_Region.xMin, desired.xMin, blend), Mathf.Lerp(m_Region.yMin, desired.yMin, blend),
+                        Mathf.Lerp(m_Region.xMax, desired.xMax, blend), Mathf.Lerp(m_Region.yMax, desired.yMax, blend));
+                }
+                m_RegionReady = true;
+            }
+            else if (!valid) EndPointer();
+
+            if (!m_RegionReady || !valid && !m_Warp.HasActivePokes)
+            {
+                m_Surface.SetActive(false);
+                m_RegionReady = false;
+                m_FocusedPersonId = -1;
+                return false;
+            }
+            float depth = m_DistanceEstimator.Estimate(person, out _);
+            ApplyScreenRegion(depth);
+            return valid;
+        }
+
+        PersonPoseData BestPerson()
+        {
+            PersonPoseData best = null;
+            var persons = m_PersonTracking.Persons;
+            for (int i = 0; i < persons.Count; i++)
+                if (persons[i].trackingConfidence > 0.2f && (best == null || persons[i].trackingConfidence > best.trackingConfidence))
+                    best = persons[i];
+            return best;
+        }
+
+        static bool TryGetRegion(PersonPoseData person, out Rect region)
+        {
+            region = default;
+            if (person == null) return false;
+            Rect rect = person.screenRect;
+            Vector2 padding = new Vector2(Mathf.Max(0.06f, rect.width * 0.30f), Mathf.Max(0.06f, rect.height * 0.18f));
+            region = Rect.MinMaxRect(Mathf.Clamp01(rect.xMin - padding.x), Mathf.Clamp01(rect.yMin - padding.y),
+                Mathf.Clamp01(rect.xMax + padding.x), Mathf.Clamp01(rect.yMax + padding.y));
+            return region.width > 0.01f && region.height > 0.01f;
+        }
+
+        void ApplyScreenRegion(float depth)
+        {
+            depth = Mathf.Max(m_Camera.nearClipPlane + 0.02f, depth);
+            Vector2 center = m_Region.center;
+            Vector3 world = m_Camera.ViewportToWorldPoint(new Vector3(center.x, center.y, depth));
+            float width = Vector3.Distance(m_Camera.ViewportToWorldPoint(new Vector3(m_Region.xMin, center.y, depth)),
+                m_Camera.ViewportToWorldPoint(new Vector3(m_Region.xMax, center.y, depth)));
+            float height = Vector3.Distance(m_Camera.ViewportToWorldPoint(new Vector3(center.x, m_Region.yMin, depth)),
+                m_Camera.ViewportToWorldPoint(new Vector3(center.x, m_Region.yMax, depth)));
+            m_Surface.transform.SetPositionAndRotation(world, m_Camera.transform.rotation * Quaternion.Euler(0f, 180f, 0f));
+            m_Surface.transform.localScale = Vector3.one;
+            m_Warp.SetPlaneSize(width, height);
+            m_Warp.pokeRadius = Mathf.Min(width, height) * 0.40f;
+            m_Surface.SetActive(true);
+        }
+
         public bool TryBegin(int pointerId, Vector2 screenPosition)
         {
-            if (!m_RegionReady || m_Tracker == null || !m_Tracker.HasPose || !m_Rig.HasTrackedPart ||
-                ARCoreModeOverlay.IsPointOnOverlay(screenPosition)) return false;
+            if (!m_RegionReady || ARCoreModeOverlay.IsPointOnOverlay(screenPosition)) return false;
             Vector3 viewport = m_Camera.ScreenToViewportPoint(screenPosition);
+            if (m_PersonTracking != null)
+            {
+                var person = m_PersonTracking.Pick(new Vector2(viewport.x, viewport.y), 0.30f, 0.18f);
+                if (person == null || !TryGetRegion(person, out m_Region)) return false;
+                m_FocusedPersonId = person.personId;
+                m_RegionReady = true;
+                float depth = m_DistanceEstimator.Estimate(person, out _);
+                ApplyScreenRegion(depth);
+            }
+            else if (m_Tracker == null || !m_Tracker.HasPose || m_Rig == null || !m_Rig.HasTrackedPart) return false;
             if (!m_Region.Contains(new Vector2(viewport.x, viewport.y))) return false;
             EndPointer();
             m_PointerHeld = true;
-            m_Tracker.DeformationGestureActive = true;
+            if (m_Tracker != null) m_Tracker.DeformationGestureActive = true;
             m_PointerId = pointerId;
             m_Warp.BeginAt(pointerId, PointOnSurface(screenPosition));
             m_Renderer.enabled = true;
+            if (m_DetectionManager != null) m_DetectionManager.SetInferencePaused(true);
             Debug.Log("[PersonWarp] 人物周围区域开始形变，区域=" + m_Region);
             return true;
         }
@@ -136,6 +234,7 @@ namespace EarthOL.ARCore
             if (!m_PointerHeld) return;
             m_PointerHeld = false;
             if (m_Warp != null) m_Warp.OnPokeEnd(m_PointerId);
+            if (m_DetectionManager != null) m_DetectionManager.SetInferencePaused(m_Warp != null && m_Warp.HasActivePokes);
             Debug.Log("[PersonWarp] 松手，开始弹簧回弹。");
         }
 
@@ -183,6 +282,7 @@ namespace EarthOL.ARCore
         {
             EndPointer();
             if (m_Tracker != null) m_Tracker.DeformationGestureActive = false;
+            if (m_DetectionManager != null) m_DetectionManager.SetInferencePaused(false);
             if (m_Surface != null) m_Surface.SetActive(false);
             m_RegionReady = false;
         }

@@ -1,5 +1,11 @@
 # BodyThrow prototype
 
+> The default ARCore scene has migrated to live 2D cartoons plus frozen 3D person
+> snapshots. See [PERSON_SYSTEM.md](PERSON_SYSTEM.md) for the current architecture
+> and [PERSON_SYSTEM_RESULTS.md](PERSON_SYSTEM_RESULTS.md) for verification and
+> device limits. The projectile workflow below is retained as Legacy System and
+> is not activated by the default bootstrap.
+
 `更改投掷物` opens a four-sector radial wheel with model thumbnails. In throw mode,
 holding the screen for 0.48 seconds also opens it: slide around the wheel and
 release to select; return to its center before release to cancel. Up/right/down/left

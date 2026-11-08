@@ -18,6 +18,7 @@ namespace EarthOL.BodyThrow
         readonly List<BodyPoseResult> m_Candidates = new List<BodyPoseResult>(16);
         Rect m_InputRect = new Rect(0, 0, InputSize, InputSize);
         bool m_LoggedShapes;
+        float[] m_InputData;
 
         public bool Ready => m_Worker != null;
         public string Error { get; private set; }
@@ -35,8 +36,11 @@ namespace EarthOL.BodyThrow
             try
             {
                 m_Model = ModelLoader.Load(nnModel);
-                m_Worker = WorkerFactory.CreateWorker(WorkerFactory.Type.Auto, m_Model);
-                Debug.Log("[Pose] YOLOv8-Pose 模型就绪：" + m_Worker.GetType().Name);
+                bool mali = SystemInfo.graphicsDeviceName.IndexOf("Mali", System.StringComparison.OrdinalIgnoreCase) >= 0;
+                var backend = mali ? WorkerFactory.Type.CSharpBurst : WorkerFactory.Type.Auto;
+                m_Worker = WorkerFactory.CreateWorker(backend, m_Model);
+                Debug.Log("[Pose] YOLOv8-Pose 模型就绪：" + m_Worker.GetType().Name +
+                    (mali ? "，Mali GPU 显存保护：使用 Burst CPU 后端" : "，使用自动后端"));
             }
             catch (System.Exception exception)
             {
@@ -63,6 +67,34 @@ namespace EarthOL.BodyThrow
                 Decode(boxes, scores, pose);
             }
 
+            return SelectResults(maxResults);
+        }
+
+        public IEnumerator DetectScheduled(Color32[] pixels, int width, int height, int maxResults,
+            System.Action<BodyPoseResult[]> completed)
+        {
+            if (!Ready) yield break;
+            using (var input = BuildInput(pixels, width, height))
+            {
+                var schedule = m_Worker.StartManualSchedule(input);
+                long start = System.Diagnostics.Stopwatch.GetTimestamp();
+                while (schedule.MoveNext())
+                {
+                    double milliseconds = (System.Diagnostics.Stopwatch.GetTimestamp() - start) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                    if (milliseconds < 4.0) continue;
+                    m_Worker.FlushSchedule(false);
+                    yield return null;
+                    start = System.Diagnostics.Stopwatch.GetTimestamp();
+                }
+                m_Worker.FlushSchedule(false);
+                yield return null;
+                Decode(m_Worker.PeekOutput("boxes_raw"), m_Worker.PeekOutput("scores_raw"), m_Worker.PeekOutput("pose_raw"));
+                completed(SelectResults(maxResults));
+            }
+        }
+
+        BodyPoseResult[] SelectResults(int maxResults)
+        {
             m_Candidates.Sort((a, b) => b.confidence.CompareTo(a.confidence));
             var result = new List<BodyPoseResult>(Mathf.Min(maxResults, m_Candidates.Count));
 
@@ -86,7 +118,8 @@ namespace EarthOL.BodyThrow
 
         Tensor BuildInput(Color32[] pixels, int width, int height)
         {
-            var data = new float[InputSize * InputSize * 3];
+            if (m_InputData == null) m_InputData = new float[InputSize * InputSize * 3];
+            var data = m_InputData;
             float resize = Mathf.Min((float)InputSize / width, (float)InputSize / height);
             int resizedWidth = Mathf.Max(1, Mathf.RoundToInt(width * resize));
             int resizedHeight = Mathf.Max(1, Mathf.RoundToInt(height * resize));
@@ -115,15 +148,16 @@ namespace EarthOL.BodyThrow
                 }
             }
 
-            return new Tensor(1, InputSize, InputSize, 3, data);
+            return new Tensor(1, InputSize, InputSize, 3,
+                new SharedArrayTensorData(data, 0, data.Length), "ReusablePoseInput");
         }
 
         void Decode(Tensor boxes, Tensor scores, Tensor pose)
         {
             m_Candidates.Clear();
-            var boxData = boxes.ToReadOnlyArray();
-            var scoreData = scores.ToReadOnlyArray();
-            var poseData = pose.ToReadOnlyArray();
+            var boxData = boxes.readonlyArray;
+            var scoreData = scores.readonlyArray;
+            var poseData = pose.readonlyArray;
             const int anchors = 3549;
             const int boxChannels = 64;
             const int poseChannels = 51;

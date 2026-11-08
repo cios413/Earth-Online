@@ -11,6 +11,8 @@
 
 # IDE and editor generated files
 .vs/
+*.csproj
+*.sln
 *.csproj.user
 *.pidb
 *.suo

@@ -3,10 +3,10 @@ namespace EarthOL
     /// <summary>项目的两种可选功能。</summary>
     public enum GameMode
     {
-        /// <summary>形变模式：ARCore 识别图卡片和虚拟软体被拉伸/鼓起。</summary>
+        /// <summary>2D 卡通跟踪与人物周围画面形变。</summary>
         Deform = 0,
 
-        /// <summary>投掷模式：切换到独立的 AR Foundation 人体代理场景。</summary>
+        /// <summary>点击跟踪人物，生成一个固定的 3D Capsule 人体快照。</summary>
         Throw = 1
     }
 }
