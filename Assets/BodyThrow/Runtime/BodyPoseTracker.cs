@@ -73,6 +73,9 @@ namespace EarthOL.BodyThrow
             m_Rig != null && m_Rig.HasTrackedPart && Time.realtimeSinceStartup - m_LastSeenTime <= PoseLostGrace;
         public bool ShowDiagnostics { get; set; }
 
+        /// <summary>成功选中一个人物（新一轮目标）后触发。</summary>
+        public event System.Action PersonSelected;
+
         public void Configure(Camera camera, BodyProxyRig rig)
         {
             m_Camera = camera;
@@ -138,6 +141,12 @@ namespace EarthOL.BodyThrow
             DeformationMode = deform;
             m_PressActive = false;
             ClearPendingInput();
+        }
+
+        /// <summary>重新选择：回到「双击人物选择目标」流程，不重新加载场景、不重启 AR。</summary>
+        public void RequestReselect()
+        {
+            ResetTracking("双击人物选择目标");
         }
 
         private bool PausePoseForPicker(bool open, float now)
@@ -283,6 +292,7 @@ namespace EarthOL.BodyThrow
                 m_SelectionPending = false;
                 m_TrackingEnabled = true;
                 if (m_Rig != null) m_Rig.gameObject.SetActive(true);
+                PersonSelected?.Invoke();
                 Debug.Log("[Pose] 已选择人物，按位置连续匹配；丢失后需重新双击");
             }
             else

@@ -23,10 +23,12 @@ namespace EarthOL.ARCore
         public static bool IsProjectilePickerOpen => Instance != null && Instance.m_ChoosingProjectile;
 
         public static bool BlocksWorldInput => Instance != null &&
-            (Instance.m_ChoosingProjectile || Time.unscaledTime < Instance.m_InputBlockedUntil);
+            (Instance.m_ChoosingProjectile || Time.unscaledTime < Instance.m_InputBlockedUntil ||
+             EarthOL.Combat.CombatOverlay.BlocksWorldInput);
 
         public static bool IsPointOnOverlay(Vector2 screenPosition)
         {
+            if (EarthOL.Combat.CombatOverlay.IsPointOnOverlay(screenPosition)) return true;
             if (Instance == null) return false;
             if (BlocksWorldInput) return true;
             var guiPoint = new Vector2(screenPosition.x, Screen.height - screenPosition.y);

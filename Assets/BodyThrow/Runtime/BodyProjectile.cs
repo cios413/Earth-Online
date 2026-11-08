@@ -26,6 +26,9 @@ namespace EarthOL.BodyThrow
         public Quaternion AttachedLocalRotation { get; private set; }
         public float MaxLifetime { get => maxLifetime; set => maxLifetime = Mathf.Max(0.05f, value); }
 
+        /// <summary>本次投掷对应的攻击 ID（由投掷器在生成时写入），命中后用于上报攻击事件。</summary>
+        public string AttackId { get; set; }
+
         private void Awake()
         {
             m_Body = GetComponent<Rigidbody>();
@@ -113,6 +116,9 @@ namespace EarthOL.BodyThrow
             var bounce = GetComponent<ProjectileImpactBounce>();
             if (bounce == null) bounce = gameObject.AddComponent<ProjectileImpactBounce>();
             bounce.Play(m_Box.center.z + m_Box.size.z * 0.5f);
+
+            // 投掷物成功命中并贴附后，才算一次成功攻击。
+            EarthOL.Combat.AttackDispatcher.Report(AttackId);
 
             Debug.Log($"[BodyThrow] 命中身体部位：{part.PartType}，投掷物已贴附");
         }

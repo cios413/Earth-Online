@@ -19,8 +19,12 @@ namespace EarthOL.ARCore
         bool m_PointerHeld;
         int m_PointerId;
 
+        [Tooltip("按压攻击对应的攻击 ID，按压真正触发形变后上报。")]
+        [SerializeField] private string pressAttackId = "press";
+
         public Rect Region => m_Region;
         public PokeWarpDeformer Warp => m_Warp;
+        public string PressAttackId { get => pressAttackId; set => pressAttackId = value; }
 
         public void Configure(Camera camera, BodyProxyRig rig, BodyPoseTracker tracker)
         {
@@ -127,6 +131,10 @@ namespace EarthOL.ARCore
             m_PointerId = pointerId;
             m_Warp.BeginAt(pointerId, PointOnSurface(screenPosition));
             m_Renderer.enabled = true;
+
+            // 按压真正触发有效形变后，才算一次成功攻击。
+            EarthOL.Combat.AttackDispatcher.Report(pressAttackId);
+
             Debug.Log("[PersonWarp] 人物周围区域开始形变，区域=" + m_Region);
             return true;
         }

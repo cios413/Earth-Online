@@ -133,9 +133,15 @@ namespace EarthOL.BodyThrow
                 origin + direction * safeDistance,
                 Quaternion.LookRotation(direction));
             m_ActiveProjectiles.Add(projectile);
+            projectile.AttackId = CurrentAttackId;
             projectile.Launch(selectedTarget, direction * throwSpeed);
             return projectile;
         }
+
+        string CurrentAttackId =>
+            catalog != null && catalog.entries.Length > 0 && m_SelectedProjectileIndex < catalog.entries.Length
+                ? catalog.entries[m_SelectedProjectileIndex].key
+                : null;
 
         private static bool TryGetInput(out Vector2 position)
         {
