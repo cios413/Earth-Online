@@ -53,6 +53,12 @@ namespace EarthOL.Combat
         /// <summary>攻击模块的成功回调调用此方法上报攻击事件。</summary>
         public static void Report(string attackId)
         {
+            Report(attackId, null);
+        }
+
+        /// <summary>上报攻击成功事件，可选携带目标标识（当前单目标场景可传 null）。</summary>
+        public static void Report(string attackId, string targetId)
+        {
             if (Instance == null || string.IsNullOrEmpty(attackId)) return;
 
             if (!Instance.definitions.TryGetValue(attackId, out var definition))
@@ -61,7 +67,7 @@ namespace EarthOL.Combat
                 return;
             }
 
-            Instance.AttackPerformed?.Invoke(new AttackReport(definition));
+            Instance.AttackPerformed?.Invoke(new AttackReport(definition, Time.unscaledTime, targetId));
         }
     }
 }

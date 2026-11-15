@@ -17,6 +17,20 @@ namespace EarthOL.Combat
             return settings;
         }
 
+        public static ComboConfig CreateDefaultComboConfig()
+        {
+            var config = ScriptableObject.CreateInstance<ComboConfig>();
+            config.name = "ComboConfig (defaults)";
+            return config;
+        }
+
+        public static AttackDamageConfig CreateDefaultAttackDamageConfig()
+        {
+            var config = ScriptableObject.CreateInstance<AttackDamageConfig>();
+            config.name = "AttackDamageConfig (defaults)";
+            return config;
+        }
+
         /// <summary>
         /// 生成默认攻击定义。传入投掷物目录时按目录条目生成，保证攻击 ID 与目录 key 一致；
         /// 目录为 null 时生成按压 + 四种已知投掷物。
@@ -25,7 +39,9 @@ namespace EarthOL.Combat
         {
             var list = new List<AttackDefinition>
             {
-                CreateAttack("press", "按压", string.Empty, "下", 10f)
+                CreateAttack("press", "按压", string.Empty, "下", 10f, AttackType.BarehandPress),
+                CreateAttack("swipe", "挥打", string.Empty, "下", 8f, AttackType.BarehandSwipe),
+                CreateAttack("StickyHandHold", "手持粘粘手拍打", string.Empty, "下", 20f, AttackType.ItemHold)
             };
 
             if (catalog != null && catalog.entries != null && catalog.entries.Length > 0)
@@ -34,25 +50,25 @@ namespace EarthOL.Combat
                 {
                     if (entry == null || string.IsNullOrEmpty(entry.key)) continue;
                     ApplyThrowDefaults(entry.key, entry.displayName, out var verb, out var item, out var unit, out var damage);
-                    list.Add(CreateAttack(entry.key, verb, item, unit, damage));
+                    list.Add(CreateAttack(entry.key, verb, item, unit, damage, AttackType.ItemThrow));
                 }
             }
             else
             {
-                list.Add(CreateAttack("StickyHand", "投掷", "粘粘手", "个", 15f));
-                list.Add(CreateAttack("Brain", "投掷", "大脑", "个", 25f));
-                list.Add(CreateAttack("JellyCube", "投掷", "方块", "个", 10f));
-                list.Add(CreateAttack("Arrow", "射出", "箭", "根", 20f));
+                list.Add(CreateAttack("StickyHand", "投掷", "粘粘手", "个", 15f, AttackType.ItemThrow));
+                list.Add(CreateAttack("Brain", "投掷", "大脑", "个", 25f, AttackType.ItemThrow));
+                list.Add(CreateAttack("JellyCube", "投掷", "方块", "个", 10f, AttackType.ItemThrow));
+                list.Add(CreateAttack("Arrow", "射出", "箭", "根", 20f, AttackType.ItemThrow));
             }
 
             return list.ToArray();
         }
 
-        static AttackDefinition CreateAttack(string id, string verb, string item, string unit, float damage)
+        static AttackDefinition CreateAttack(string id, string verb, string item, string unit, float damage, AttackType type)
         {
             var definition = ScriptableObject.CreateInstance<AttackDefinition>();
             definition.name = "Attack_" + id;
-            definition.Configure(id, verb, item, unit, damage);
+            definition.Configure(id, verb, item, unit, damage, type);
             return definition;
         }
 

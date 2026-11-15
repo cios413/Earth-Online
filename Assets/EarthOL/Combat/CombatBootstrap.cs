@@ -28,6 +28,13 @@ namespace EarthOL.Combat
         HealthSettingsOverlay settingsOverlay;
         HealthBarUI healthBar;
         HealthSettings settings;
+        ComboManager comboManager;
+        CombatDamagePipeline damagePipeline;
+        CriticalHitManager criticalHitManager;
+        ComboHUDController comboHUD;
+        CombatFeedbackController feedback;
+        ComboConfig comboConfig;
+        AttackDamageConfig attackDamageConfig;
         GameObject healthBarAnchor;
         AttackDefinition[] configuredAttacks;
 
@@ -77,9 +84,21 @@ namespace EarthOL.Combat
             resultUI = gameObject.AddComponent<ResultUI>();
             settingsOverlay = gameObject.AddComponent<HealthSettingsOverlay>();
 
+            comboManager = gameObject.AddComponent<ComboManager>();
+            damagePipeline = gameObject.AddComponent<CombatDamagePipeline>();
+            comboHUD = gameObject.AddComponent<ComboHUDController>();
+            feedback = gameObject.AddComponent<CombatFeedbackController>();
+
             LoadConfiguration();
             dispatcher.Register(GetAttacks());
             settingsOverlay.Configure(settings);
+
+            comboManager.Configure(comboConfig);
+            criticalHitManager = new CriticalHitManager();
+            criticalHitManager.Configure(attackDamageConfig);
+            damagePipeline.Configure(healthSystem, comboManager, criticalHitManager, attackDamageConfig);
+            comboHUD.Configure(comboManager, damagePipeline, comboConfig);
+            feedback.Configure(damagePipeline);
 
             healthBarAnchor = new GameObject("HealthBarAnchor");
             healthBar = healthBarAnchor.AddComponent<HealthBarUI>();
@@ -98,11 +117,19 @@ namespace EarthOL.Combat
                     ? config.healthSettings
                     : CombatDefaults.CreateDefaultHealthSettings();
                 configuredAttacks = config.attacks;
+                comboConfig = config.comboConfig != null
+                    ? config.comboConfig
+                    : CombatDefaults.CreateDefaultComboConfig();
+                attackDamageConfig = config.attackDamageConfig != null
+                    ? config.attackDamageConfig
+                    : CombatDefaults.CreateDefaultAttackDamageConfig();
             }
             else
             {
                 settings = CombatDefaults.CreateDefaultHealthSettings();
                 configuredAttacks = null;
+                comboConfig = CombatDefaults.CreateDefaultComboConfig();
+                attackDamageConfig = CombatDefaults.CreateDefaultAttackDamageConfig();
             }
         }
 
@@ -123,6 +150,7 @@ namespace EarthOL.Combat
 
             healthSystem.Initialized += OnHealthInitialized;
             healthSystem.Damaged += OnHealthDamaged;
+            healthSystem.Defeated += comboManager.Freeze;
 
             defeatController.SettlementRequested += OnSettlementRequested;
             resultUI.ReselectRequested += OnReselectRequested;
@@ -133,6 +161,7 @@ namespace EarthOL.Combat
             // 攻击历史独立于血条模式：每次选择都开一轮新记录。
             history.Begin();
             defeatController.ResetForNewRound();
+            comboManager.ResetCombo();
 
             if (settings != null && settings.HealthBarModeEnabled)
                 StartHealthRound();
@@ -185,6 +214,7 @@ namespace EarthOL.Combat
             healthSystem.Deactivate();
             healthBar.Hide();
             defeatController.ResetForNewRound();
+            comboManager.ResetCombo();
 
             if (bootstrap != null && bootstrap.Spawner != null)
                 bootstrap.Spawner.ClearProjectiles();

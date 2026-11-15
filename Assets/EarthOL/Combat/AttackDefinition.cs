@@ -25,8 +25,11 @@ namespace EarthOL.Combat
         [Header("结算用计数单位")]
         [SerializeField] string countUnit = "个";
 
-        [Header("伤害值（占位默认，可随时调整）")]
+        [Header("基础伤害（连击/暴击在此基础上计算）")]
         [SerializeField, Min(0f)] float damage = 10f;
+
+        [Header("攻击类型（连击/暴击按此分类；未设置时按攻击 ID 自动推断）")]
+        [SerializeField] AttackType attackType = AttackType.Unspecified;
 
         public string AttackId => attackId;
         public string DisplayName => string.IsNullOrEmpty(displayName) ? attackId : displayName;
@@ -34,13 +37,33 @@ namespace EarthOL.Combat
         public string CountUnit => string.IsNullOrEmpty(countUnit) ? "个" : countUnit;
         public float Damage => Mathf.Max(0f, damage);
 
+        public AttackType AttackType =>
+            attackType == AttackType.Unspecified ? InferAttackType(attackId) : attackType;
+
         public void Configure(string id, string verb, string item, string unit, float damageValue)
+        {
+            Configure(id, verb, item, unit, damageValue, InferAttackType(id));
+        }
+
+        public void Configure(string id, string verb, string item, string unit, float damageValue, AttackType type)
         {
             attackId = id;
             displayName = verb;
             itemName = item;
             countUnit = unit;
             damage = Mathf.Max(0f, damageValue);
+            attackType = type;
+        }
+
+        public static AttackType InferAttackType(string attackId)
+        {
+            if (string.IsNullOrEmpty(attackId)) return AttackType.ItemThrow;
+            var id = attackId.Trim();
+
+            if (id == "press") return AttackType.BarehandPress;
+            if (id == "swipe") return AttackType.BarehandSwipe;
+            if (id.EndsWith("Hold", System.StringComparison.OrdinalIgnoreCase)) return AttackType.ItemHold;
+            return AttackType.ItemThrow;
         }
     }
 }

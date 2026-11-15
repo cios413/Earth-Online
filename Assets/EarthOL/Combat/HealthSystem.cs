@@ -7,6 +7,7 @@ namespace EarthOL.Combat
     /// 当前选择物体这一轮交互的血量。只负责初始化、扣血、归零判断，
     /// 归零时发出通用的 Defeated 事件，不做任何视觉表现。
     /// 关闭血条模式时 IsActive 为 false，不响应任何伤害。
+    /// 伤害来源由连击/暴击管道计算后调用 ApplyDamage 传入。
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class HealthSystem : MonoBehaviour
@@ -19,31 +20,6 @@ namespace EarthOL.Combat
         public bool IsActive { get; private set; }
         public float MaxHealth { get; private set; }
         public float CurrentHealth { get; private set; }
-
-        bool subscribed;
-
-        void OnEnable() => Subscribe();
-        void OnDisable() => Unsubscribe();
-
-        void Subscribe()
-        {
-            if (subscribed || AttackDispatcher.Instance == null) return;
-            AttackDispatcher.Instance.AttackPerformed += OnAttackPerformed;
-            subscribed = true;
-        }
-
-        void Unsubscribe()
-        {
-            if (!subscribed || AttackDispatcher.Instance == null) return;
-            AttackDispatcher.Instance.AttackPerformed -= OnAttackPerformed;
-            subscribed = false;
-        }
-
-        void OnAttackPerformed(AttackReport report)
-        {
-            if (!IsActive) return;
-            ApplyDamage(report.Definition != null ? report.Definition.Damage : 0f);
-        }
 
         /// <summary>初始化新一轮血量，初始血量等于传入的最大血量。</summary>
         public void Initialize(float maxHealth)

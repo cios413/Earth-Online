@@ -25,6 +25,8 @@ Shader "EarthOL/PokeWarp"
         [HideInInspector] _PokePos3 ("Poke 3", Vector) = (0, 0, 0, 0)
         [HideInInspector] _PokeAmp3 ("Stretch 3", Float) = 0
         [HideInInspector] _PokeBulge3 ("Bulge 3", Float) = 0
+        [HideInInspector] _SwipeDir ("Swipe Dir", Vector) = (1, 0, 0, 0)
+        [HideInInspector] _SwipeAmp ("Swipe Amp", Float) = 0
     }
 
     SubShader
@@ -52,6 +54,7 @@ Shader "EarthOL/PokeWarp"
             float4 _PokePos1; float _PokeAmp1; float _PokeBulge1;
             float4 _PokePos2; float _PokeAmp2; float _PokeBulge2;
             float4 _PokePos3; float _PokeAmp3; float _PokeBulge3;
+            float4 _SwipeDir; float _SwipeAmp;
 
             sampler2D _PokeWarpGrab;
             float4 _PokeWarpGrab_TexelSize;
@@ -101,6 +104,9 @@ Shader "EarthOL/PokeWarp"
                 Warp(p0, n, _PokePos1, _PokeAmp1, _PokeBulge1, disp);
                 Warp(p0, n, _PokePos2, _PokeAmp2, _PokeBulge2, disp);
                 Warp(p0, n, _PokePos3, _PokeAmp3, _PokeBulge3, disp);
+
+                // 挥扫：整体沿面内方向横向剪切（采样仍取未变形位置，画面像被扇向一侧）
+                disp += float3(_SwipeDir.x, _SwipeDir.y, 0.0) * _SwipeAmp;
 
                 // 变形前的位置 -> 屏幕坐标：用它去"取回"物理卡片原来那块的摄像头画面
                 o.restScreen = ComputeScreenPos(UnityObjectToClipPos(float4(p0, 1.0)));

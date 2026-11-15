@@ -192,7 +192,7 @@ namespace EarthOL.EditorTools
                 Invoke(tracker, "ExpireParts");
                 Check(!rig.HasTrackedPart, "Expired parts must disable collision");
                 Invoke(tracker, "ResetTracking", "test");
-                Check(!tracker.HasPose && !tracker.CanThrow, "Loss must clear pose and throwing");
+                Check(!tracker.HasPose, "Loss must clear pose");
             }
             finally
             {

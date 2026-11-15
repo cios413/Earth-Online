@@ -16,8 +16,6 @@ namespace EarthOL.BodyThrow
         const int CaptureSize = 640;
         const float ScanInterval = 0.5f;
         const float PoseLostGrace = 0.75f;
-        const float DoubleTapInterval = 0.38f;
-        const float DoubleTapDistance = 80f;
         const float PartLostGrace = 0.4f;
 
         Camera m_Camera;
@@ -50,27 +48,12 @@ namespace EarthOL.BodyThrow
         bool m_TrackingEnabled;
         bool m_SelectionPending;
         Vector2 m_SelectionScreenPosition;
-        bool m_HasPendingTap;
-        Vector2 m_PendingTap;
-        float m_PendingTapTime;
-        bool m_HasProjectileTap;
-        Vector2 m_ProjectileTap;
-        bool m_PressActive;
-        bool m_PressMoved;
-        int m_PressId;
-        Vector2 m_PressOrigin;
-        float m_PressStart;
-        float m_PickerPauseStart = -1f;
-        const float LongPressDuration = 0.48f;
-        const float TapMovement = 40f;
 
         public bool DeformationMode { get; private set; }
         public bool DeformationGestureActive { get; set; }
         public bool HasPose => m_Current.IsValid;
         public BodyPoseResult Current => m_Current;
         public bool TrackingEnabled => m_TrackingEnabled;
-        public bool CanThrow => !DeformationMode && isActiveAndEnabled && m_TrackingEnabled && HasPose &&
-            m_Rig != null && m_Rig.HasTrackedPart && Time.realtimeSinceStartup - m_LastSeenTime <= PoseLostGrace;
         public bool ShowDiagnostics { get; set; }
 
         /// <summary>成功选中一个人物（新一轮目标）后触发。</summary>
@@ -94,10 +77,6 @@ namespace EarthOL.BodyThrow
         {
             if (!enabled || m_Camera == null || m_Rig == null) return;
 
-            PollTapGesture();
-            bool interactive = ARCoreModeOverlay.IsProjectilePickerOpen ||
-                DeformationMode && DeformationGestureActive && HasPose && !m_SelectionPending;
-            if (PausePoseForPicker(interactive, Time.realtimeSinceStartup)) return;
             ExpireParts();
 
             if (m_TrackingEnabled && Time.realtimeSinceStartup - m_LastSeenTime > PoseLostGrace)
@@ -122,25 +101,9 @@ namespace EarthOL.BodyThrow
             }
         }
 
-        public bool TryConsumeProjectileTap(out Vector2 screenPosition)
-        {
-            screenPosition = Vector2.zero;
-            if (!m_HasProjectileTap) return false;
-            screenPosition = m_ProjectileTap;
-            m_HasProjectileTap = false;
-            return true;
-        }
-
-        public void ClearPendingInput()
-        {
-            m_HasPendingTap = m_HasProjectileTap = false;
-        }
-
         public void SetDeformationMode(bool deform)
         {
             DeformationMode = deform;
-            m_PressActive = false;
-            ClearPendingInput();
         }
 
         /// <summary>重新选择：回到「双击人物选择目标」流程，不重新加载场景、不重启 AR。</summary>
@@ -149,132 +112,38 @@ namespace EarthOL.BodyThrow
             ResetTracking("双击人物选择目标");
         }
 
-        private bool PausePoseForPicker(bool open, float now)
+        /// <summary>在指定屏幕位置开始选择人物（由攻击输入路由在双击时调用）。</summary>
+        public void TrySelectAt(Vector2 screenPosition)
         {
-            if (open)
-            {
-                if (m_PickerPauseStart < 0f) m_PickerPauseStart = now;
-                return true;
-            }
-            if (m_PickerPauseStart >= 0f)
-            {
-                float paused = Mathf.Max(0f, now - m_PickerPauseStart);
-                m_LastSeenTime += paused;
-                m_HeadSeenTime += paused;
-                m_TorsoSeenTime += paused;
-                m_SelectionStartTime += paused;
-                m_PickerPauseStart = -1f;
-                m_Timer = 0f;
-            }
-            return false;
+            m_SelectionScreenPosition = screenPosition;
+            m_SelectionPending = true;
+            m_SelectionStartTime = Time.realtimeSinceStartup;
+            m_TrackingEnabled = false;
+            m_Current = default;
+            m_Raw = default;
+            m_Smoothed.Clear();
+            m_Rejected.Clear();
+            m_Distance = 0f;
+            m_HeadSeenTime = m_TorsoSeenTime = float.NegativeInfinity;
+            m_HeadValid = m_TorsoValid = false;
+            m_Status = "正在选择人物";
+            if (m_Rig != null) m_Rig.HideTrackedParts();
+            Debug.Log("[Pose] 双击收到，开始在点击位置附近选择人物");
         }
 
-        private void PollTapGesture()
+        /// <summary>返回当前选中人物在屏幕上的投影包围盒（屏幕坐标，原点左下）。</summary>
+        public bool TryGetSelectedScreenRect(out Rect screenRect)
         {
-            bool hasPointer = BodyPointerFrame.TryRead(out var frame);
-            ProcessWorldPointer(frame, hasPointer, Time.unscaledTime);
-        }
-
-        private void ProcessWorldPointer(BodyPointerFrame frame, bool hasPointer, float now)
-        {
-            if (ARCoreModeOverlay.IsRadialHoldOpen)
-            {
-                ClearPendingInput();
-                if (hasPointer && frame.id == m_PressId)
-                {
-                    ARCoreModeOverlay.Instance.UpdateRadialSelection(frame.position);
-                    if (frame.released || frame.canceled)
-                    {
-                        ARCoreModeOverlay.Instance.EndRadialSelection(frame.canceled);
-                        m_PressActive = false;
-                    }
-                }
-                else
-                {
-                    ARCoreModeOverlay.Instance.EndRadialSelection(true);
-                    m_PressActive = false;
-                }
-                return;
-            }
-            if (ARCoreModeOverlay.BlocksWorldInput)
-            {
-                m_PressActive = false;
-                ClearPendingInput();
-                return;
-            }
-            if (hasPointer && frame.down)
-            {
-                if (ARCoreModeOverlay.IsPointOnOverlay(frame.position))
-                {
-                    ClearPendingInput();
-                    m_PressActive = false;
-                    return;
-                }
-                m_PressActive = true;
-                m_PressMoved = false;
-                m_PressId = frame.id;
-                m_PressOrigin = frame.position;
-                m_PressStart = now;
-            }
-            if (m_PressActive && hasPointer && frame.id == m_PressId)
-            {
-                m_PressMoved |= Vector2.Distance(frame.position, m_PressOrigin) > TapMovement;
-                if (!DeformationMode && frame.held && !m_PressMoved && now - m_PressStart >= LongPressDuration && ARCoreModeOverlay.Instance != null)
-                {
-                    ClearPendingInput();
-                    ARCoreModeOverlay.Instance.BeginRadialSelection(frame.position);
-                    return;
-                }
-                if (frame.released || frame.canceled)
-                {
-                    m_PressActive = false;
-                    if (!frame.canceled && !m_PressMoved && now - m_PressStart < LongPressDuration)
-                        HandleTap(frame.position, now);
-                }
-            }
-            else if (m_PressActive && !hasPointer) m_PressActive = false;
-
-            if (!m_PressActive && m_HasPendingTap && now - m_PendingTapTime >= DoubleTapInterval)
-            {
-                m_HasPendingTap = false;
-                if (CanThrow)
-                {
-                    m_HasProjectileTap = true;
-                    m_ProjectileTap = m_PendingTap;
-                }
-            }
-        }
-
-        private void HandleTap(Vector2 screenPosition, float now)
-        {
-            bool isDoubleTap = m_HasPendingTap &&
-                               now - m_PendingTapTime <= DoubleTapInterval &&
-                               Vector2.Distance(screenPosition, m_PendingTap) <= DoubleTapDistance;
-
-            if (isDoubleTap)
-            {
-                m_HasPendingTap = false;
-                m_HasProjectileTap = false;
-                m_SelectionScreenPosition = screenPosition;
-                m_SelectionPending = true;
-                m_SelectionStartTime = Time.realtimeSinceStartup;
-                m_TrackingEnabled = false;
-                m_Current = default;
-                m_Smoothed.Clear();
-                m_Rejected.Clear();
-                m_Distance = 0f;
-                m_HeadSeenTime = m_TorsoSeenTime = float.NegativeInfinity;
-                m_Raw = default;
-                m_HeadValid = m_TorsoValid = false;
-                m_Status = "正在选择人物";
-                m_Rig.HideTrackedParts();
-                Debug.Log("[Pose] 双击收到，开始在点击位置附近选择人物");
-                return;
-            }
-
-            m_HasPendingTap = true;
-            m_PendingTap = screenPosition;
-            m_PendingTapTime = now;
+            screenRect = default;
+            if (m_Camera == null || !HasPose) return false;
+            Vector2 min = m_Camera.ViewportToScreenPoint(new Vector3(m_Current.screenRect.xMin, m_Current.screenRect.yMin, 0f));
+            Vector2 max = m_Camera.ViewportToScreenPoint(new Vector3(m_Current.screenRect.xMax, m_Current.screenRect.yMax, 0f));
+            float xMin = Mathf.Min(min.x, max.x);
+            float xMax = Mathf.Max(min.x, max.x);
+            float yMin = Mathf.Min(min.y, max.y);
+            float yMax = Mathf.Max(min.y, max.y);
+            screenRect = Rect.MinMaxRect(xMin, yMin, xMax, yMax);
+            return screenRect.width > 1f && screenRect.height > 1f;
         }
 
         private void Scan()
@@ -521,9 +390,7 @@ namespace EarthOL.BodyThrow
 
         private void ResetTracking(string status)
         {
-            m_PickerPauseStart = -1f;
-            m_PressActive = false;
-            m_TrackingEnabled = m_SelectionPending = m_HasPendingTap = m_HasProjectileTap = false;
+            m_TrackingEnabled = m_SelectionPending = false;
             m_Current = m_Raw = default;
             m_Smoothed.Clear();
             m_Rejected.Clear();

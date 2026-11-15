@@ -19,6 +19,7 @@ namespace EarthOL.Combat
 
         bool showing;
         string summary = string.Empty;
+        Vector2 scrollPosition;
 
         public static bool IsShowing => Instance != null && Instance.showing;
 
@@ -41,6 +42,7 @@ namespace EarthOL.Combat
         public void Show(IReadOnlyList<MergedAttack> merged)
         {
             summary = BuildSummary(merged);
+            scrollPosition = Vector2.zero;
             showing = true;
         }
 
@@ -70,8 +72,12 @@ namespace EarthOL.Combat
                 alignment = TextAnchor.UpperLeft,
                 wordWrap = true
             };
-            GUI.Label(new Rect(box.x + pad, box.y + pad, box.width - pad * 2f, box.height * 0.62f),
-                summary, textStyle);
+            var textRect = new Rect(box.x + pad, box.y + pad, box.width - pad * 2f, box.height * 0.62f);
+            float contentHeight = textStyle.CalcHeight(new GUIContent(summary), textRect.width - 18f) + 12f;
+            scrollPosition = GUI.BeginScrollView(textRect, scrollPosition,
+                new Rect(0f, 0f, textRect.width - 18f, contentHeight));
+            GUI.Label(new Rect(0f, 0f, textRect.width - 18f, contentHeight), summary, textStyle);
+            GUI.EndScrollView();
 
             var buttonStyle = new GUIStyle(GUI.skin.button)
             {

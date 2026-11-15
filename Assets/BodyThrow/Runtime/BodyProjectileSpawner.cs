@@ -1,12 +1,7 @@
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.XR.ARFoundation;
 using EarthOL.ARCore;
 using System.Collections.Generic;
-
-#if ENABLE_INPUT_SYSTEM
-using UnityEngine.InputSystem;
-#endif
 
 namespace EarthOL.BodyThrow
 {
@@ -71,30 +66,8 @@ namespace EarthOL.BodyThrow
             if (catalog == null || index < 0 || index >= catalog.entries.Length || catalog.entries[index].prefab == null)
                 return false;
             m_SelectedProjectileIndex = index;
-            if (poseTracker != null) poseTracker.ClearPendingInput();
             Debug.Log("[BodyThrow] 已更改投掷物：" + SelectedProjectileName);
             return true;
-        }
-
-        private void Update()
-        {
-            if (ARCoreModeOverlay.BlocksWorldInput)
-            {
-                if (poseTracker != null) poseTracker.ClearPendingInput();
-                return;
-            }
-            if (poseTracker != null)
-            {
-                if (!poseTracker.TryConsumeProjectileTap(out var trackedTap)) return;
-                if (!poseTracker.CanThrow) return;
-                ThrowAtScreenPoint(trackedTap);
-                return;
-            }
-
-            if (!TryGetInput(out var screenPosition)) return;
-            if (ARCoreModeOverlay.IsPointOnOverlay(screenPosition)) return;
-            if (IsOverUI()) return;
-            ThrowAtScreenPoint(screenPosition);
         }
 
         public BodyProjectile ThrowAtScreenPoint(Vector2 screenPosition)
@@ -142,40 +115,6 @@ namespace EarthOL.BodyThrow
             catalog != null && catalog.entries.Length > 0 && m_SelectedProjectileIndex < catalog.entries.Length
                 ? catalog.entries[m_SelectedProjectileIndex].key
                 : null;
-
-        private static bool TryGetInput(out Vector2 position)
-        {
-            position = Vector2.zero;
-#if ENABLE_INPUT_SYSTEM
-            var touchscreen = Touchscreen.current;
-            if (touchscreen != null)
-            {
-                foreach (var touch in touchscreen.touches)
-                {
-                    if (!touch.press.wasPressedThisFrame) continue;
-                    position = touch.position.ReadValue();
-                    return true;
-                }
-            }
-
-            if (!Application.isMobilePlatform)
-            {
-                var mouse = Mouse.current;
-                if (mouse != null && mouse.leftButton.wasPressedThisFrame)
-                {
-                    position = mouse.position.ReadValue();
-                    return true;
-                }
-            }
-#endif
-            return false;
-        }
-
-        private static bool IsOverUI()
-        {
-            var eventSystem = EventSystem.current;
-            return eventSystem != null && eventSystem.IsPointerOverGameObject();
-        }
 
         private static bool IsFinite(Vector3 value)
         {

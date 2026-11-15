@@ -29,6 +29,9 @@ namespace EarthOL.BodyThrow
         /// <summary>本次投掷对应的攻击 ID（由投掷器在生成时写入），命中后用于上报攻击事件。</summary>
         public string AttackId { get; set; }
 
+        /// <summary>投掷命中并贴附成功后触发，供后续命中特效（待做）订阅。</summary>
+        public static event System.Action<BodyProjectile, BodyPartProxy> ImpactEffect;
+
         private void Awake()
         {
             m_Body = GetComponent<Rigidbody>();
@@ -119,6 +122,7 @@ namespace EarthOL.BodyThrow
 
             // 投掷物成功命中并贴附后，才算一次成功攻击。
             EarthOL.Combat.AttackDispatcher.Report(AttackId);
+            ImpactEffect?.Invoke(this, part);
 
             Debug.Log($"[BodyThrow] 命中身体部位：{part.PartType}，投掷物已贴附");
         }

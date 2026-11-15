@@ -108,7 +108,8 @@ namespace EarthOL.ARCore
             if (BodyRig != null) BodyRig.gameObject.SetActive(true);
             if (Spawner != null) Spawner.enabled = !deform;
             if (PoseTracker != null) PoseTracker.SetDeformationMode(deform);
-            if (PersonDeformer != null) PersonDeformer.enabled = deform;
+            // 手持挥扫也需要 warp 表面，故始终保持启用；按压是否触发由攻击路由按背包状态决定。
+            if (PersonDeformer != null) PersonDeformer.enabled = true;
         }
 
         private IEnumerator InitializeXR()

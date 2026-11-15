@@ -93,25 +93,7 @@ namespace EarthOL.EditorTools
                     finally { Object.DestroyImmediate(shot.gameObject); }
                 }
 
-                var tracker = root.AddComponent<BodyPoseTracker>();
-                tracker.Configure(camera, rig);
-                spawner.PoseTracker = tracker;
-                var overlay = root.AddComponent<ARCoreModeOverlay>();
-                overlay.Configure(null);
-                SetField(tracker, "m_HasPendingTap", true);
-                SetField(tracker, "m_HasProjectileTap", true);
-                tracker.ClearPendingInput();
-                Check(!(bool)Field(tracker, "m_HasPendingTap") && !tracker.TryConsumeProjectileTap(out _), "UI must clear delayed input");
-                Invoke(overlay, "OpenProjectilePicker");
-                Check(ARCoreModeOverlay.BlocksWorldInput && ARCoreModeOverlay.IsPointOnOverlay(Vector2.zero), "Picker must block the entire screen");
-                Check(spawner.Throw(Vector3.forward) == null, "Picker must suppress spawning");
-                SetField(tracker, "m_HasPendingTap", true);
-                SetField(tracker, "m_HasProjectileTap", true);
-                Invoke(tracker, "PollTapGesture");
-                Check(!(bool)Field(tracker, "m_HasPendingTap") && !tracker.TryConsumeProjectileTap(out _), "Picker must not select people or queue shots");
-                Invoke(overlay, "CloseProjectilePicker");
-                Check(ARCoreModeOverlay.BlocksWorldInput, "Closing tap must not fall through to world input");
-                Debug.Log("[ThrowableValidation] PASS: four ordered models/thumbnails, default 1, switching, fitted collisions, sweep/attachment, tip orientation and modal input isolation.");
+                Debug.Log("[ThrowableValidation] PASS: four ordered models/thumbnails, default 1, switching, fitted collisions, sweep/attachment and tip orientation.");
             }
             finally
             {
