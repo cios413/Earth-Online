@@ -5,6 +5,7 @@ using UnityEditor;
 using UnityEditor.Build.Reporting;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Rendering;
 using Object = UnityEngine.Object;
 
 namespace EarthOL.EditorTools
@@ -37,6 +38,13 @@ namespace EarthOL.EditorTools
 
             // APK 而不是 AAB，方便直接安装
             EditorUserBuildSettings.buildAppBundle = false;
+
+            // ARCore 5.1.6 requires OpenGLES3 for this project. Keep one
+            // predictable backend for all devices and reduce the camera/readback
+            // workload in the runtime bootstrap and pose tracker.
+            PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.Android, false);
+            PlayerSettings.SetGraphicsAPIs(BuildTarget.Android,
+                new[] { GraphicsDeviceType.OpenGLES3 });
 
             if (EditorUserBuildSettings.activeBuildTarget != BuildTarget.Android)
                 EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, BuildTarget.Android);

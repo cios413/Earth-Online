@@ -126,7 +126,14 @@ namespace EarthOL.EditorTools
                 catalog = ScriptableObject.CreateInstance<BodyProjectileCatalog>();
                 AssetDatabase.CreateAsset(catalog, catalogPath);
             }
-            catalog.entries = entries;
+            var allEntries = new System.Collections.Generic.List<BodyProjectileCatalog.Entry>(entries);
+            foreach (var previous in catalog.entries)
+            {
+                int index = Array.FindIndex(entries, item => item.key == previous.key);
+                if (index >= 0) entries[index].slimeColor = previous.slimeColor;
+                else allEntries.Add(previous);
+            }
+            catalog.entries = allEntries.ToArray();
             EditorUtility.SetDirty(catalog);
             AssetDatabase.SaveAssets();
             Debug.Log("[Throwables] Four-model catalog created; default is 1号 · 粘粘手.");

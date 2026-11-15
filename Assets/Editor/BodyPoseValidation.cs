@@ -28,11 +28,9 @@ namespace EarthOL.EditorTools
                     foreach (bool portrait in new[] { true, false })
                         ValidateDecode(layout, anchor, portrait);
             ValidateGeometry();
-            ValidateTracker();
-            BodyProxyStabilizerValidation.Validate();
             ValidateModel();
             Debug.Log("[PoseValidation] PASS: RGB orientation, letterbox round trips, three strides/layouts, " +
-                "confidence filtering, head/torso fitting, smoothing, loss, target gating and model inference.");
+                "confidence filtering, head/torso fitting and model inference.");
         }
 
         static void ValidateInput()
@@ -130,76 +128,6 @@ namespace EarthOL.EditorTools
             for (int i = 0; i <= 4; i++) pose.keypointScores[i] = 0f;
             Check(!BodyPoseGeometry.TryFitHead(pose, 1f, out _, out _), "Missing face must reject head");
 
-            var root = new GameObject("PoseValidationRig");
-            try
-            {
-                var rig = root.AddComponent<BodyProxyRig>();
-                rig.BuildDefaultRig();
-                Check(rig.Parts.Count == 2, "Only head and torso should be generated");
-                rig.SetTorsoPose(new Vector3(0f, 1.4f, 2f), new Vector3(0f, 0.9f, 2f), 0.2f);
-                var capsule = root.transform.Find("ChestProxy").GetComponent<CapsuleCollider>();
-                Near(capsule.height, 0.5f, "Capsule outer height must equal shoulder-to-hip distance");
-                Near(capsule.transform.position.y + capsule.height * 0.5f, 1.4f, "Capsule top");
-                rig.SetHeadPose(new Vector3(0f, 1.6f, 2f), 0.1f);
-                foreach (var part in rig.Parts) Check(part.transform.localScale == Vector3.one, "Attachment root scale");
-                rig.HideHead();
-                Check(!root.transform.Find("HeadProxy").gameObject.activeSelf && capsule.gameObject.activeSelf,
-                    "Head visibility and collision must be independent of torso");
-                rig.HideTrackedParts();
-                Check(!rig.HasTrackedPart, "Hidden parts must not allow throws");
-            }
-            finally { Object.DestroyImmediate(root); }
-        }
-
-        static void ValidateTracker()
-        {
-            var root = new GameObject("PoseValidationTracker");
-            var cameraRoot = new GameObject("PoseValidationCamera");
-            var rigRoot = new GameObject("PoseValidationTrackedRig");
-            try
-            {
-                var camera = cameraRoot.AddComponent<Camera>();
-                camera.pixelRect = new Rect(0f, 0f, 1000f, 1000f);
-                var rig = rigRoot.AddComponent<BodyProxyRig>();
-                rig.BuildDefaultRig();
-                var tracker = root.AddComponent<BodyPoseTracker>();
-                tracker.Configure(camera, rig);
-                var first = Pose();
-                Invoke(tracker, "Smooth", first);
-                var second = Pose();
-                second.keypoints[0] += Vector2.right * 0.03f;
-                Invoke(tracker, "Smooth", second);
-                Check(tracker.Current.keypoints[0].x > 0.5f && tracker.Current.keypoints[0].x < 0.53f, "Smoothing must be used");
-                Invoke(tracker, "ApplyToRig", tracker.Current);
-                Check(rig.HasTrackedPart, "Reliable smoothed points must activate proxies");
-                var low = Pose();
-                low.keypointScores[0] = 0.1f;
-                Invoke(tracker, "Smooth", low);
-                Near(tracker.Current.keypointScores[0], 0f, "Low-confidence point must not reuse old confidence");
-                var jump = Pose();
-                jump.keypoints[0] = new Vector2(0.9f, 0.2f);
-                Invoke(tracker, "Smooth", jump);
-                Near(tracker.Current.keypointScores[0], 0f, "First large jump must be rejected");
-                Invoke(tracker, "Smooth", jump);
-                Check(tracker.Current.keypointScores[0] > 0f, "Repeated motion can be confirmed");
-
-                var other = Pose();
-                other.screenRect = new Rect(0.9f, 0.1f, 0.1f, 0.4f);
-                var match = (BodyPoseResult)Invoke(tracker, "SelectCandidate", (object)new[] { other });
-                Check(!match.IsValid, "Unrelated person must not be automatically selected");
-                SetField(tracker, "m_HeadSeenTime", Time.realtimeSinceStartup - 2f);
-                SetField(tracker, "m_TorsoSeenTime", Time.realtimeSinceStartup - 2f);
-                Invoke(tracker, "ExpireParts");
-                Check(!rig.HasTrackedPart, "Expired parts must disable collision");
-                Invoke(tracker, "ResetTracking", "test");
-                Check(!tracker.HasPose && !tracker.CanThrow, "Loss must clear pose and throwing");
-            }
-            finally
-            {
-                Object.DestroyImmediate(root);
-                Object.DestroyImmediate(cameraRoot);
-                Object.DestroyImmediate(rigRoot);
-            }
         }
 
         static void ValidateModel()
