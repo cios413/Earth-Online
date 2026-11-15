@@ -13,8 +13,11 @@ namespace EarthOL.BodyThrow
     [DisallowMultipleComponent]
     public sealed class BodyPoseTracker : MonoBehaviour
     {
-        const int CaptureSize = 640;
-        const float ScanInterval = 0.16f;
+        // Keep the camera readback small enough for devices with limited GPU memory.
+        // The pose network still receives its fixed 416x416 input, so this reduces
+        // the AR readback cost without changing the model or its output layout.
+        const int CaptureSize = 384;
+        const float ScanInterval = 0.30f;
         const float PoseLostGrace = 0.75f;
         const float DoubleTapInterval = 0.38f;
         const float DoubleTapDistance = 80f;
@@ -342,6 +345,9 @@ namespace EarthOL.BodyThrow
                 RenderTexture.active = m_Target;
                 m_Frame.ReadPixels(new Rect(0, 0, m_Target.width, m_Target.height), 0, 0);
                 m_Frame.Apply(false);
+                // Unity 2022.3 exposes GetPixels32() without an output-buffer
+                // overload. The reduced 480px readback keeps this allocation small
+                // while remaining compatible with the project's Unity version.
                 m_Pixels = m_Frame.GetPixels32();
                 return true;
             }
@@ -464,8 +470,18 @@ namespace EarthOL.BodyThrow
             if (estimate > 0f)
             {
                 estimate = Mathf.Clamp(estimate, 0.45f, 6f);
-                m_Distance = m_Distance <= 0f ? estimate : Mathf.Lerp(m_Distance,
-                    Mathf.Clamp(estimate, m_Distance * 0.8f, m_Distance * 1.2f), 0.25f);
+                if (m_Distance <= 0f)
+                    m_Distance = estimate;
+                else
+                {
+                    // A single bad keypoint frame can make the projected torso
+                    // size collapse and produce a false multi-metre jump. Keep
+                    // the last stable depth until the new estimate is plausible.
+                    float minimum = m_Distance * 0.65f;
+                    float maximum = m_Distance * 1.35f;
+                    if (estimate >= minimum && estimate <= maximum)
+                        m_Distance = Mathf.Lerp(m_Distance, estimate, 0.20f);
+                }
             }
 
             if (m_Distance > 0f)
