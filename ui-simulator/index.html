@@ -1,0 +1,1200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>EARTH OL · 街头涂鸦 UI 模拟器</title>
+<style>
+/* ============================================================
+   EARTH OL — UI 框架网页模拟器
+   风格：Splatoon 街头涂鸦 / 荧光撞色 / 果冻立体按钮 / 半调网点
+   页面流程：首页骷髅门 → 模式选择 → 游戏悬浮 HUD → 结算榜单
+   说明：这里只是“网页模拟器”，用来对齐交互与视觉框架，
+        确认后按同样的色板/布局移植进 Unity (UGUI/TextMeshPro)。
+   ============================================================ */
+
+/* ---------- 设计令牌 Design Tokens ---------- */
+:root{
+  --green:      #7CFF4F;   /* 荧光亮绿 */
+  --green-deep: #2FBF3F;
+  --pink:       #FF3DF0;   /* 荧光玫红 */
+  --pink-deep:  #C8139B;
+  --orange:     #FF9A1F;   /* 亮橙 */
+  --orange-deep:#E85D0B;
+  --cyan:       #3EE6FF;
+  --ink:        #0B0A12;   /* 墨黑底 */
+  --panel:      #181428;   /* 深色半调面板 */
+  --bone:       #EEF7FF;   /* 骨白 */
+  --bone-shade: #C6D9E6;
+  --navy:       #100F1D;   /* 眼窝深色 */
+  --line:       #F5F2FF;   /* 亮线/主文字 */
+  --cell: 13px;            /* 骷髅像素格 */
+  --font: "Arial Black","Arial Bold","Impact","Haettenschweiler","Franklin Gothic Bold",
+          "Segoe UI",system-ui,"PingFang SC","Microsoft YaHei",sans-serif;
+}
+
+*{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body{ height:100%; }
+body{
+  font-family:var(--font);
+  color:var(--line);
+  background:
+    radial-gradient(circle at 1px 1px, rgba(255,255,255,.05) 1px, transparent 0) 0 0/14px 14px,
+    radial-gradient(circle at 1px 1px, rgba(124,255,79,.06) 1.4px, transparent 0) 7px 7px/26px 26px,
+    radial-gradient(1200px 700px at 20% 10%, rgba(255,61,240,.10), transparent 60%),
+    radial-gradient(900px 600px at 85% 90%, rgba(255,154,31,.10), transparent 55%),
+    #0B0A12;
+  display:flex; flex-direction:column; align-items:center;
+  padding:20px 14px 60px; gap:14px; overflow-x:hidden;
+}
+
+/* ---------- 顶部标题 ---------- */
+.masthead{ text-align:center; user-select:none; }
+.masthead h1{
+  font-size:clamp(26px,5vw,44px); font-weight:900; letter-spacing:2px; line-height:.95;
+  color:#fff; -webkit-text-stroke:2px var(--ink);
+  text-shadow: 4px 4px 0 var(--pink-deep), 7px 7px 0 rgba(0,0,0,.35);
+  transform:skew(-3deg);
+}
+.masthead h1 b{ color:var(--green); -webkit-text-stroke:2px var(--ink); text-shadow:4px 4px 0 var(--ink); }
+.masthead p{ margin-top:6px; font-size:12px; letter-spacing:4px; color:#9f97c2; }
+
+/* ---------- 开发工具条（跳转页面/重置/规范） ---------- */
+.devbar{
+  display:flex; flex-wrap:wrap; gap:8px; justify-content:center;
+  padding:10px 14px; border-radius:16px;
+  background:rgba(24,20,40,.82); border:2px solid #2a2347;
+  box-shadow:0 8px 24px rgba(0,0,0,.4);
+}
+.devbar .lbl{ align-self:center; font-size:11px; letter-spacing:2px; color:#6f68a0; }
+.devbar button{
+  font-family:var(--font); font-weight:900; font-size:12px; letter-spacing:1px;
+  color:#fff; cursor:pointer; padding:9px 14px; border-radius:12px; border:2px solid var(--ink);
+  background:linear-gradient(180deg,#3a3160,#221b3d);
+  box-shadow:0 4px 0 rgba(0,0,0,.45), inset 0 2px 0 rgba(255,255,255,.14);
+  transition:transform .08s ease, box-shadow .08s ease;
+}
+.devbar button:active{ transform:translateY(3px); box-shadow:0 1px 0 rgba(0,0,0,.45); }
+.devbar button.active{ background:linear-gradient(180deg,var(--green),var(--green-deep)); color:#08140a; }
+.devbar button.glow{ background:linear-gradient(180deg,var(--pink),var(--pink-deep)); }
+.devbar button.org{ background:linear-gradient(180deg,var(--orange),var(--orange-deep)); }
+
+/* ---------- 手机外框 ---------- */
+.phone{
+  position:relative; width:400px; height:820px; flex:none;
+  border-radius:44px; background:#05040a;
+  padding:12px; box-shadow:0 40px 80px rgba(0,0,0,.6), 0 0 0 3px #2a2347, inset 0 0 0 2px #000;
+}
+.viewport{
+  position:relative; width:100%; height:100%; border-radius:34px; overflow:hidden;
+  background:var(--ink);
+}
+.notch{
+  position:absolute; top:6px; left:50%; transform:translateX(-50%);
+  width:120px; height:20px; background:#05040a; border-radius:0 0 14px 14px; z-index:50;
+}
+
+/* ---------- 屏幕通用 ---------- */
+.screen{
+  position:absolute; inset:0; display:flex; flex-direction:column;
+  opacity:0; visibility:hidden; transition:opacity .28s ease, visibility .28s;
+  overflow:hidden;
+}
+.screen.on{ opacity:1; visibility:visible; }
+.screen.fadeout{ animation:screenOut .28s ease forwards; }
+@keyframes screenOut{ to{ opacity:0; } }
+
+/* 半调网点暗纹层（贴在各屏幕底部） */
+.halftone-layer{
+  position:absolute; inset:0; pointer-events:none; z-index:0;
+  background:
+    radial-gradient(circle at 1px 1px, rgba(255,255,255,.05) 1px, transparent 0) 0 0/13px 13px,
+    radial-gradient(circle at 1px 1px, rgba(124,255,79,.07) 1.3px, transparent 0) 6px 6px/24px 24px;
+}
+.screen > *{ position:relative; z-index:2; }
+
+/* ---------- 墨水泼溅 ---------- */
+.splat{
+  position:absolute; width:70px; height:70px; color:var(--green);
+  background:radial-gradient(circle at 42% 42%, currentColor 0 58%, transparent 62%);
+  border-radius:58% 42% 62% 38% / 52% 62% 40% 50%;
+  transform:translate(-50%,-50%) rotate(var(--rot,0deg)) scale(0);
+  animation:splatIn .55s cubic-bezier(.18,1.5,.35,1) forwards;
+  pointer-events:none; z-index:40; opacity:.92;
+}
+.splat::before,.splat::after{ content:""; position:absolute; border-radius:50%; background:currentColor; }
+.splat::before{ width:42%; height:42%; top:-14%; left:52%; filter:brightness(1.06); }
+.splat::after{ width:30%; height:30%; top:44%; left:-12%; filter:brightness(.92); }
+.splat .drop{
+  position:absolute; border-radius:50%; background:currentColor; filter:brightness(1.05);
+}
+@keyframes splatIn{
+  0%{ transform:translate(-50%,-50%) rotate(var(--rot,0deg)) scale(0); opacity:.95; }
+  60%{ transform:translate(-50%,-50%) rotate(var(--rot,0deg)) scale(1.15); opacity:.9; }
+  100%{ transform:translate(-50%,-50%) rotate(var(--rot,0deg)) scale(1); opacity:0; }
+}
+.splat.deco{
+  animation:none; opacity:.5; transform:translate(-50%,-50%) rotate(var(--rot,0deg)) scale(1);
+}
+.splat.deco.pulse{ animation:floaty 5s ease-in-out infinite; }
+@keyframes floaty{ 0%,100%{ transform:translate(-50%,-50%) rotate(var(--rot,0deg)) scale(1);} 50%{ transform:translate(-50%,-56%) rotate(var(--rot,0deg)) scale(1.06);} }
+
+/* ---------- 果冻立体按钮 ---------- */
+.jelly{
+  position:relative; display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  font-family:var(--font); font-weight:900; letter-spacing:1px; color:#fff;
+  border:3px solid var(--ink); border-radius:22px; cursor:pointer; user-select:none;
+  box-shadow: inset 0 -7px 0 rgba(0,0,0,.28), inset 0 3px 0 rgba(255,255,255,.32),
+              0 7px 0 rgba(0,0,0,.5), 0 14px 22px rgba(0,0,0,.35);
+  text-shadow:0 2px 0 rgba(0,0,0,.42); transition:transform .08s ease, box-shadow .08s ease, filter .12s;
+}
+.jelly:active{ transform:translateY(5px); box-shadow: inset 0 -4px 0 rgba(0,0,0,.28), inset 0 3px 0 rgba(255,255,255,.32), 0 2px 0 rgba(0,0,0,.5); }
+.jelly::before{
+  content:""; position:absolute; left:9%; right:9%; top:5px; height:46%; border-radius:999px;
+  background:linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,.06));
+  pointer-events:none; mix-blend-mode:screen;
+}
+.jelly.green{ background:linear-gradient(180deg,var(--green),var(--green-deep)); color:#06200a; text-shadow:0 1px 0 rgba(255,255,255,.5); }
+.jelly.pink{ background:linear-gradient(180deg,var(--pink),var(--pink-deep)); }
+.jelly.orange{ background:linear-gradient(180deg,var(--orange),var(--orange-deep)); color:#2a0f00; text-shadow:0 1px 0 rgba(255,255,255,.4); }
+.jelly.dark{ background:linear-gradient(180deg,#332a57,#1e1840); }
+
+/* ---------- 涂鸦长条面板 ---------- */
+.panel{
+  background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0)), var(--panel);
+  border:3px solid var(--ink);
+  border-radius:16px;
+  box-shadow: inset 0 2px 0 rgba(255,255,255,.08), 0 6px 0 rgba(0,0,0,.45);
+}
+.panel.tagged{ position:relative; }
+.panel.tagged::before{
+  content:attr(data-tag); position:absolute; top:-12px; left:14px;
+  font-size:11px; font-weight:900; letter-spacing:2px; color:var(--ink);
+  background:var(--green); border:2px solid var(--ink); border-radius:8px; padding:2px 9px;
+  transform:rotate(-4deg);
+}
+
+/* ---------- 血条 ---------- */
+.hpbar{
+  position:relative; height:22px; border:3px solid var(--ink); border-radius:12px;
+  background:#0a0913; overflow:hidden;
+  box-shadow:0 4px 0 rgba(0,0,0,.45), inset 0 -4px 0 rgba(0,0,0,.35);
+}
+.hpbar .fill{
+  position:absolute; inset:0; width:100%; transform-origin:left center;
+  background:linear-gradient(180deg, #b7ff9a, var(--green) 55%, var(--green-deep));
+  transition:width .28s cubic-bezier(.5,.1,.3,1);
+}
+.hpbar .fill::after{ /* 高光 */
+  content:""; position:absolute; left:0; right:0; top:2px; height:7px;
+  background:linear-gradient(180deg, rgba(255,255,255,.55), transparent);
+}
+.hpbar .fill.low{ background:linear-gradient(180deg,#ffd59a,var(--orange) 55%,var(--orange-deep)); }
+.hpbar .fill.crit{ background:linear-gradient(180deg,#ff9ad6,var(--pink) 55%,var(--pink-deep)); }
+.hpbar .ticks{ position:absolute; inset:0; display:flex; z-index:2; pointer-events:none; }
+.hpbar .ticks i{ flex:1; border-right:2px solid rgba(0,0,0,.35); }
+.hpbar .ticks i:last-child{ border-right:none; }
+.hpbar .flash{
+  position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:3;
+}
+.hpbar .flash.hit{ animation:hpFlash .28s ease; }
+@keyframes hpFlash{ 0%{opacity:.85;} 100%{opacity:0;} }
+
+/* 血条标签 */
+.hp-label{
+  display:flex; justify-content:space-between; align-items:baseline;
+  font-size:11px; letter-spacing:2px; font-weight:900; margin-bottom:6px;
+}
+.hp-label .k{ color:#9f97c2; }
+.hp-label .v{ color:var(--green); }
+
+/* ---------- 首页：骷髅门 ---------- */
+#screen-home{ align-items:center; justify-content:space-between; padding:64px 22px 30px; }
+.home-title{ text-align:center; }
+.home-title .big{
+  font-size:40px; font-weight:900; letter-spacing:1px; line-height:.9; color:#fff;
+  -webkit-text-stroke:2px var(--ink); text-shadow:4px 4px 0 var(--pink-deep), 8px 8px 0 rgba(0,0,0,.35);
+  transform:skew(-4deg);
+}
+.home-title .big b{ color:var(--green); -webkit-text-stroke:2px var(--ink); }
+.home-title .sub{ margin-top:10px; font-size:12px; letter-spacing:5px; color:#8f87bd; }
+
+.skull-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; cursor:pointer; user-select:none; }
+.skull-wrap .hpbar{ width:260px; margin-bottom:10px; }
+.skull-hint{
+  position:absolute; top:108px; right:-34px; font-size:12px; font-weight:900; color:var(--orange);
+  transform:rotate(8deg); -webkit-text-stroke:1px var(--ink); text-shadow:2px 2px 0 var(--ink);
+}
+#skull{ position:relative; }
+.skull-box{ position:relative; }
+.skull-svg{ display:block; filter: drop-shadow(0 12px 16px rgba(0,0,0,.5)) drop-shadow(0 0 20px rgba(62,230,255,.25)); }
+#skull.shake{ animation:skullShake .16s linear; }
+@keyframes skullShake{
+  0%,100%{ transform:translate(0,0) rotate(0); }
+  25%{ transform:translate(-5px,2px) rotate(-2deg); }
+  50%{ transform:translate(4px,-3px) rotate(1.5deg); }
+  75%{ transform:translate(-3px,1px) rotate(-1deg); }
+}
+.skull-crack{
+  position:absolute; inset:0; pointer-events:none; z-index:3; opacity:0; transition:opacity .25s;
+}
+.skull-crack path{ fill:none; stroke:#fff; stroke-width:3; stroke-linecap:round; opacity:.9; }
+#skull.shatter .skull-svg{
+  animation:skullBurst .5s ease-in forwards;
+}
+@keyframes skullBurst{
+  0%{ transform:scale(1) rotate(0); opacity:1; }
+  100%{ transform:scale(1.35) rotate(8deg); opacity:0; }
+}
+
+.home-foot{ text-align:center; }
+.home-foot .hint{
+  font-size:15px; font-weight:900; letter-spacing:2px; color:var(--green);
+  -webkit-text-stroke:1px var(--ink); text-shadow:2px 2px 0 var(--ink); animation:blink 1.1s steps(2) infinite;
+}
+.home-foot .en{ margin-top:6px; font-size:10px; letter-spacing:3px; color:#6f68a0; }
+@keyframes blink{ 50%{ opacity:.35; } }
+
+/* 伤害数字 */
+.dmg{
+  position:absolute; z-index:45; font-weight:900; font-size:22px; color:#fff;
+  -webkit-text-stroke:1.5px var(--ink); text-shadow:2px 2px 0 var(--ink);
+  pointer-events:none; animation:dmgUp .7s ease-out forwards;
+}
+@keyframes dmgUp{ 0%{ transform:translate(-50%,0) scale(.6); opacity:0;} 20%{opacity:1; transform:translate(-50%,-12px) scale(1.25);} 100%{ transform:translate(-50%,-56px) scale(1); opacity:0;} }
+
+/* 破门闪光 */
+.breakflash{ position:absolute; inset:0; background:#fff; opacity:0; z-index:60; pointer-events:none; }
+.breakflash.go{ animation:breakGo .5s ease; }
+@keyframes breakGo{ 0%{opacity:0;} 20%{opacity:.9;} 100%{opacity:0;} }
+
+/* ---------- 模式选择 ---------- */
+#screen-mode{ padding:64px 24px 30px; }
+.mode-title{ text-align:center; margin-bottom:8px; }
+.mode-title .big{ font-size:30px; font-weight:900; letter-spacing:1px; -webkit-text-stroke:2px var(--ink); text-shadow:3px 3px 0 var(--orange-deep); color:#fff; transform:skew(-3deg); }
+.mode-title .en{ font-size:11px; letter-spacing:5px; color:#8f87bd; margin-top:6px; }
+.mode-cards{ display:flex; flex-direction:column; gap:18px; margin-top:16px; flex:1; }
+.mode-card{
+  position:relative; flex:1; border-radius:26px; cursor:pointer; overflow:hidden;
+  border:3px solid var(--ink); display:flex; flex-direction:column; justify-content:flex-end; padding:18px;
+  box-shadow: inset 0 -8px 0 rgba(0,0,0,.25), inset 0 4px 0 rgba(255,255,255,.28), 0 8px 0 rgba(0,0,0,.5);
+  transition:transform .1s ease; user-select:none;
+}
+.mode-card::before{ content:""; position:absolute; left:8%; right:8%; top:6px; height:46%; border-radius:999px; background:linear-gradient(180deg, rgba(255,255,255,.5), transparent); mix-blend-mode:screen; }
+.mode-card:active{ transform:scale(.97) translateY(4px); }
+.mode-card.attack{ background:linear-gradient(180deg,var(--pink),var(--pink-deep)); }
+.mode-card.free{ background:linear-gradient(180deg,var(--green),var(--green-deep)); }
+.mode-card .ico{ font-size:44px; position:absolute; top:14px; right:16px; filter:drop-shadow(3px 4px 0 rgba(0,0,0,.35)); }
+.mode-card .name{ font-size:28px; font-weight:900; color:#fff; -webkit-text-stroke:1.5px var(--ink); text-shadow:3px 3px 0 rgba(0,0,0,.4); }
+.mode-card .en{ font-size:11px; letter-spacing:4px; color:rgba(255,255,255,.8); font-weight:900; }
+.mode-card .desc{ margin-top:8px; font-size:12px; color:rgba(255,255,255,.92); text-shadow:0 1px 0 rgba(0,0,0,.4); }
+.mode-back{ align-self:center; margin-top:14px; font-size:12px; padding:9px 20px; }
+
+/* ---------- 模式选择：两外星人 + 中间地球 ---------- */
+.pick-stage{ position:relative; flex:1; margin-top:4px; }
+.earth{
+  position:absolute; left:50%; top:46%; transform:translate(-50%,-50%);
+  width:100px; height:100px; border:4px solid var(--ink); border-radius:50%;
+  background:
+    radial-gradient(circle at 34% 30%, #e6ffff 0 7%, transparent 8%),
+    radial-gradient(circle at 40% 42%, var(--green) 0 18%, transparent 19%),
+    radial-gradient(circle at 66% 68%, #3fbf6f 0 24%, transparent 25%),
+    linear-gradient(135deg, #3ee6ff, #1d7fbb 62%, #134a6e);
+  box-shadow: inset -10px -8px #0a1e3366, inset 6px 6px #ffffff55,
+              0 0 0 4px #ffffff33, 0 0 26px #3ee6ff88, 0 10px 0 #05040a;
+  z-index:2;
+}
+.earth::before{ content:""; position:absolute; inset:-13px -18px; border:2px dashed #ffffff88; border-radius:50%; transform:rotate(-22deg); }
+.earth-label{ position:absolute; left:50%; top:calc(46% + 66px); transform:translateX(-50%); white-space:nowrap; font-size:9px; font-weight:900; letter-spacing:2px; color:var(--cyan); -webkit-text-stroke:.5px var(--ink); z-index:2; }
+.pick-alien{ position:absolute; top:44%; transform:translateY(-50%); display:flex; flex-direction:column; align-items:center; z-index:3; touch-action:none; }
+.angry-side{ left:1%; }
+.friendly-side{ right:1%; }
+.alien-pixel{
+  color:var(--pink); cursor:pointer; user-select:none;
+  filter: drop-shadow(0 9px 12px rgba(0,0,0,.45));
+}
+.friendly-side .alien-pixel{ color:var(--green); }
+.alien-svg{ display:block; }
+.alien-pixel.press{ animation:alienPress .18s ease; }
+@keyframes alienPress{ 0%{transform:scale(1);} 40%{transform:scale(1.12,.85) translateY(4px);} 100%{transform:scale(1);} }
+.pick-hp-label{ width:120px; display:flex; justify-content:space-between; font-size:10px; font-weight:900; letter-spacing:1px; color:#9f97c2; margin-bottom:5px; }
+.pick-hp-label .k{ color:#9f97c2; }
+.angry-side .pick-hp-label .v{ color:var(--pink); }
+.friendly-side .pick-hp-label .v{ color:var(--green); }
+.pick-hp{ width:120px; height:15px; }
+.pick-name{ margin-top:11px; padding:5px 11px; font-size:11px; font-weight:900; border:2px solid var(--ink); border-radius:10px; }
+.angry-name{ background:linear-gradient(180deg,var(--pink),var(--pink-deep)); color:#fff; transform:rotate(-3deg); }
+.friendly-name{ background:linear-gradient(180deg,var(--green),var(--green-deep)); color:#06200a; transform:rotate(3deg); }
+.pick-hint{ margin-top:7px; font-size:9px; letter-spacing:2px; color:#6f68a0; }
+
+/* ---------- 游戏：悬浮 AR HUD ---------- */
+#screen-game{ padding:0; }
+.ar-scene{ position:absolute; inset:0; z-index:1; overflow:hidden; }
+.ar-reality{ /* 模拟“现实世界”相机画面（灰暗、去饱和） */
+  position:absolute; inset:0;
+  background:
+    linear-gradient(180deg, rgba(24,22,36,.35), rgba(10,9,18,.6)),
+    radial-gradient(circle at 30% 60%, #3a3350 0, transparent 55%),
+    radial-gradient(circle at 72% 34%, #241f38 0, transparent 50%),
+    linear-gradient(180deg,#0d0b18,#0a0913);
+}
+.ar-reality .grid{
+  position:absolute; inset:0; opacity:.14;
+  background:
+    linear-gradient(rgba(255,255,255,.5) 1px, transparent 1px) 0 0/34px 34px,
+    linear-gradient(90deg, rgba(255,255,255,.5) 1px, transparent 1px) 0 0/34px 34px;
+  transform:perspective(500px) rotateX(55deg) translateY(38%); transform-origin:bottom;
+}
+.ar-person{ /* 目标“人形”占位 */
+  position:absolute; left:50%; top:44%; transform:translate(-50%,-50%);
+  width:120px; height:230px; opacity:.9;
+}
+.ar-person .head{ width:52px; height:52px; border-radius:50%; background:linear-gradient(180deg,#4a4366,#2c2744); margin:0 auto; border:2px solid rgba(255,255,255,.12); }
+.ar-person .body{ width:92px; height:140px; margin:8px auto 0; background:linear-gradient(180deg,#453d63,#2a2540); border-radius:26px 26px 12px 12px; border:2px solid rgba(255,255,255,.1); }
+.ar-lockbox{ /* AR 锁定框（虚拟图层） */
+  position:absolute; left:50%; top:44%; transform:translate(-50%,-50%);
+  width:210px; height:300px; pointer-events:none;
+  border:3px dashed var(--green); border-radius:20px;
+  filter:drop-shadow(0 0 8px rgba(124,255,79,.55));
+}
+.ar-lockbox .corner{ position:absolute; width:22px; height:22px; border:4px solid var(--green); border-radius:4px; filter:drop-shadow(0 0 6px rgba(124,255,79,.6)); }
+.ar-lockbox .c1{ top:-12px; left:-12px; border-right:none; border-bottom:none; }
+.ar-lockbox .c2{ top:-12px; right:-12px; border-left:none; border-bottom:none; }
+.ar-lockbox .c3{ bottom:-12px; left:-12px; border-right:none; border-top:none; }
+.ar-lockbox .c4{ bottom:-12px; right:-12px; border-left:none; border-top:none; }
+.ar-lockbox .tag{
+  position:absolute; top:-30px; left:50%; transform:translateX(-50%) rotate(-2deg);
+  font-size:11px; font-weight:900; color:var(--ink); background:var(--green);
+  border:2px solid var(--ink); border-radius:8px; padding:2px 10px; white-space:nowrap;
+}
+.crosshair{
+  position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+  width:56px; height:56px; pointer-events:none; z-index:3; opacity:.9;
+}
+.crosshair::before,.crosshair::after{
+  content:""; position:absolute; background:var(--pink); filter:drop-shadow(0 0 5px rgba(255,61,240,.7));
+}
+.crosshair::before{ left:50%; top:0; width:3px; height:20px; transform:translateX(-50%); }
+.crosshair::after{ top:50%; left:0; height:3px; width:20px; transform:translateY(-50%); }
+.crosshair .dot{ position:absolute; left:50%; top:50%; width:8px; height:8px; border-radius:50%; background:var(--pink); transform:translate(-50%,-50%); box-shadow:0 0 10px var(--pink); }
+
+/* HUD 悬浮面板层 */
+.hud{ position:absolute; inset:0; z-index:5; pointer-events:none; }
+.hud > *{ pointer-events:auto; }
+
+.hud-top{ position:absolute; top:30px; left:16px; right:16px; display:flex; justify-content:space-between; align-items:flex-start; }
+.chip{
+  display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:900; letter-spacing:1px;
+  padding:7px 12px; border-radius:12px; border:2px solid var(--ink); box-shadow:0 4px 0 rgba(0,0,0,.45);
+}
+.chip.mode{ background:linear-gradient(180deg,var(--orange),var(--orange-deep)); color:#2a0f00; }
+.chip.score{ background:rgba(24,20,40,.86); color:var(--green); }
+.chip.combo{ background:linear-gradient(180deg,var(--pink),var(--pink-deep)); color:#fff; }
+
+.enemy-hp{ position:absolute; top:118px; left:50%; transform:translateX(-50%); width:210px; }
+.enemy-hp .hp-label .v{ color:var(--pink); }
+.self-hp{ position:absolute; top:30px; left:50%; transform:translateX(-50%); width:130px; }
+.self-hp .hpbar{ height:16px; }
+
+.throw-tray{ position:absolute; left:14px; right:14px; bottom:16px; }
+.throw-tray .cap{ font-size:11px; font-weight:900; letter-spacing:3px; color:#8f87bd; margin:0 4px 8px; display:flex; justify-content:space-between; }
+.throw-tray .cap b{ color:var(--green); }
+.tray-row{ display:flex; gap:8px; }
+.t-card{
+  flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;
+  padding:9px 4px 8px; border-radius:16px; cursor:pointer; border:3px solid var(--ink);
+  background:rgba(24,20,40,.82); box-shadow:0 5px 0 rgba(0,0,0,.45);
+  transition:transform .08s ease, background .15s; user-select:none;
+}
+.t-card .ic{ font-size:26px; filter:drop-shadow(2px 2px 0 rgba(0,0,0,.4)); }
+.t-card .nm{ font-size:9px; letter-spacing:1px; color:#b8b0dd; font-weight:900; white-space:nowrap; }
+.t-card.sel{ background:linear-gradient(180deg, rgba(124,255,79,.28), rgba(47,191,63,.12)); box-shadow:0 5px 0 rgba(0,0,0,.45), 0 0 0 2px var(--green), 0 0 16px rgba(124,255,79,.4); transform:translateY(-4px); }
+.t-card.sel .nm{ color:var(--green); }
+
+.rank-mini{
+  position:absolute; top:150px; right:-4px; width:118px; border-radius:14px 0 0 14px;
+  padding:10px 10px 10px 12px; opacity:.9;
+}
+.rank-mini .t{ font-size:10px; font-weight:900; letter-spacing:2px; color:var(--orange); margin-bottom:6px; }
+.rank-mini .row{ display:flex; justify-content:space-between; font-size:10px; padding:3px 0; color:#cfc8ef; border-bottom:1px dashed rgba(255,255,255,.12); }
+.rank-mini .row b{ color:#fff; }
+
+.hitmark{ position:absolute; z-index:8; pointer-events:none; opacity:0; font-size:26px; font-weight:900; color:var(--orange); -webkit-text-stroke:1.5px var(--ink); text-shadow:2px 2px 0 var(--ink); }
+.hitmark.go{ animation:hm .5s ease forwards; }
+@keyframes hm{ 0%{ opacity:0; transform:translate(-50%,-50%) scale(1.6) rotate(-14deg);} 25%{opacity:1;} 100%{ opacity:0; transform:translate(-50%,-50%) scale(.8) rotate(0);} }
+
+.throw-btn{ position:absolute; right:14px; bottom:120px; font-size:14px; padding:12px 18px; z-index:6; }
+
+/* ---------- 结算 / 榜单 ---------- */
+#screen-result{ padding:56px 22px 26px; justify-content:flex-start; }
+.result-badge{ text-align:center; }
+.result-badge .big{
+  font-size:52px; font-weight:900; color:#fff; -webkit-text-stroke:3px var(--ink);
+  text-shadow:6px 6px 0 var(--pink-deep), 10px 10px 0 rgba(0,0,0,.35); transform:skew(-4deg); line-height:.9;
+}
+.result-badge .big b{ color:var(--green); -webkit-text-stroke:3px var(--ink); text-shadow:6px 6px 0 var(--ink); }
+.result-stats{ display:flex; gap:10px; margin:16px 0; }
+.stat{ flex:1; text-align:center; padding:12px 4px; border-radius:14px; }
+.stat .n{ font-size:22px; font-weight:900; color:var(--green); -webkit-text-stroke:1px var(--ink); text-shadow:2px 2px 0 var(--ink); }
+.stat .l{ font-size:9px; letter-spacing:2px; color:#8f87bd; margin-top:2px; }
+
+.rank-panel{ flex:1; overflow:hidden; display:flex; flex-direction:column; }
+.rank-panel .head{ font-size:14px; font-weight:900; letter-spacing:2px; color:#fff; padding:12px 14px; background:linear-gradient(180deg,var(--orange),var(--orange-deep)); border:3px solid var(--ink); border-radius:14px 14px 0 0; margin-bottom:8px; -webkit-text-stroke:1px var(--ink); text-shadow:2px 2px 0 var(--ink); }
+.rank-list{ display:flex; flex-direction:column; gap:8px; overflow:auto; }
+.rank-row{
+  display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:14px;
+  font-size:13px; font-weight:900; color:#fff; -webkit-text-stroke:.5px var(--ink);
+}
+.rank-row .rk{ width:26px; height:26px; flex:none; display:grid; place-items:center; border-radius:8px; border:2px solid var(--ink); background:#2a2350; font-size:13px; }
+.rank-row:nth-child(1) .rk{ background:linear-gradient(180deg,var(--orange),var(--orange-deep)); }
+.rank-row:nth-child(2) .rk{ background:linear-gradient(180deg,#d8dfe8,#8f99ad); color:#222; }
+.rank-row:nth-child(3) .rk{ background:linear-gradient(180deg,#e8a463,#a3652b); }
+.rank-row .nm{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rank-row .sc{ color:var(--green); }
+.rank-row.me{ background:linear-gradient(180deg, rgba(255,61,240,.25), rgba(200,19,155,.12)); box-shadow:0 0 0 2px var(--pink), 0 0 14px rgba(255,61,240,.35); }
+.result-actions{ display:flex; gap:12px; margin-top:14px; }
+.result-actions .jelly{ flex:1; padding:14px 8px; font-size:14px; }
+
+/* ---------- 规范说明面板 ---------- */
+.styleguide{
+  max-width:400px; width:100%; padding:16px; border-radius:18px; color:#cfc8ef;
+  background:rgba(24,20,40,.9); border:2px solid #2a2347; font-size:12px; line-height:1.7;
+}
+.styleguide h3{ font-size:13px; letter-spacing:2px; color:#fff; margin-bottom:8px; }
+.styleguide .swatches{ display:flex; gap:8px; margin:8px 0; }
+.styleguide .sw{ flex:1; height:30px; border-radius:8px; border:2px solid var(--ink); box-shadow:0 3px 0 rgba(0,0,0,.4); }
+.styleguide .sw.g{ background:linear-gradient(180deg,var(--green),var(--green-deep)); }
+.styleguide .sw.p{ background:linear-gradient(180deg,var(--pink),var(--pink-deep)); }
+.styleguide .sw.o{ background:linear-gradient(180deg,var(--orange),var(--orange-deep)); }
+.styleguide .sw.c{ background:linear-gradient(180deg,var(--cyan),#0e94bd); }
+.styleguide code{ color:var(--green); }
+</style>
+</head>
+<body>
+
+  <div class="masthead">
+    <h1>EARTH <b>OL</b></h1>
+    <p>街头涂鸦 · UI 框架模拟器</p>
+  </div>
+
+  <!-- 开发工具条 -->
+  <div class="devbar">
+    <span class="lbl">PAGE</span>
+    <button data-goto="home">① 首页骷髅</button>
+    <button data-goto="mode">② 搭档选择</button>
+    <button data-goto="game">③ 游戏 HUD</button>
+    <button data-goto="result">④ 结算榜单</button>
+    <span class="lbl">|</span>
+    <button class="org" id="btnReset">重置流程</button>
+    <button class="glow" id="btnStyle">风格规范</button>
+  </div>
+
+  <!-- 手机 -->
+  <div class="phone">
+    <div class="viewport" id="viewport">
+      <div class="notch"></div>
+
+      <!-- ================= ① 首页骷髅门 ================= -->
+      <section class="screen on" id="screen-home" data-name="home">
+        <div class="halftone-layer"></div>
+
+        <div class="home-title">
+          <div class="big">EARTH <b>OL</b></div>
+          <div class="sub">校园解压 · AR 派对</div>
+        </div>
+
+        <div class="skull-wrap" id="skullWrap">
+          <div class="hp-label" style="width:260px">
+            <span class="k">SKULL HP</span>
+            <span class="v" id="skullHpText">5 / 5</span>
+          </div>
+          <div class="hpbar">
+            <div class="fill" id="skullHpFill"></div>
+            <div class="ticks"></div>
+            <div class="flash" id="skullHpFlash"></div>
+          </div>
+          <div class="skull-hint">戳这里 →</div>
+          <div class="skull-box">
+            <div id="skull" aria-label="骷髅头">
+              <svg class="skull-svg" viewBox="0 0 200 230" width="220" height="253">
+                <path d="M100 10 C146 10 172 42 172 86 C172 122 162 152 154 170 L138 170 C144 182 148 194 148 206 C148 217 139 224 130 224 L70 224 C61 224 52 217 52 206 C52 194 56 182 62 170 L46 170 C38 152 28 122 28 86 C28 42 54 10 100 10 Z"
+                  fill="#EEF7FF" stroke="#0B0A12" stroke-width="7" stroke-linejoin="round"/>
+                <circle cx="72" cy="92" r="19" fill="#100F1D" stroke="#0B0A12" stroke-width="5"/>
+                <circle cx="128" cy="92" r="19" fill="#100F1D" stroke="#0B0A12" stroke-width="5"/>
+                <circle cx="72" cy="92" r="10" fill="#FF3DF0" opacity=".85"/>
+                <circle cx="128" cy="92" r="10" fill="#FF3DF0" opacity=".85"/>
+                <path d="M100 120 L112 146 L88 146 Z" fill="#100F1D" stroke="#0B0A12" stroke-width="5" stroke-linejoin="round"/>
+                <rect x="62" y="196" width="18" height="22" rx="4" fill="#ffffff" stroke="#0B0A12" stroke-width="4"/>
+                <rect x="91" y="196" width="18" height="22" rx="4" fill="#ffffff" stroke="#0B0A12" stroke-width="4"/>
+                <rect x="120" y="196" width="18" height="22" rx="4" fill="#ffffff" stroke="#0B0A12" stroke-width="4"/>
+                <ellipse cx="60" cy="38" rx="20" ry="11" fill="#ffffff" opacity=".45" transform="rotate(-18 60 38)"/>
+              </svg>
+            </div>
+            <svg class="skull-crack" id="skullCrack" viewBox="0 0 200 230">
+              <path id="crack1" d="M100 30 L84 78 L96 112 L76 160"/>
+              <path id="crack2" d="M148 52 L166 92 L142 130 L166 176"/>
+              <path id="crack3" d="M64 128 L46 168 L66 198"/>
+              <path id="crack4" d="M142 124 L164 166 L146 202"/>
+            </svg>
+          </div>
+        </div>
+
+        <div class="home-foot">
+          <div class="hint">连点骷髅 · 打破封印</div>
+          <div class="en">TAP THE SKULL ×5 · ENTER</div>
+        </div>
+
+        <div class="breakflash" id="breakFlash"></div>
+      </section>
+
+      <!-- ================= ② 模式选择 ================= -->
+      <section class="screen" id="screen-mode" data-name="mode">
+        <div class="halftone-layer"></div>
+        <div class="mode-title">
+          <div class="big">选择搭档</div>
+          <div class="en">PICK YOUR SIDEKICK</div>
+        </div>
+
+        <div class="pick-stage">
+          <div class="earth"></div>
+          <div class="earth-label">EARTH · AR ZONE</div>
+
+          <div class="pick-alien angry-side" id="angrySide">
+            <div class="pick-hp-label"><span class="k">RAGE</span><span class="v" id="rageText">5 / 5</span></div>
+            <div class="hpbar pick-hp"><div class="fill" id="rageFill"></div><div class="ticks"></div></div>
+            <div class="alien-pixel" id="angryAlien" aria-label="凶狠外星人">
+              <svg class="alien-svg" viewBox="0 0 120 150" width="104" height="130">
+                <path d="M54 24 L46 10 M66 24 L74 10" stroke="#0B0A12" stroke-width="6" stroke-linecap="round" fill="none"/>
+                <path d="M60 16 C90 16 106 38 106 68 C106 104 94 128 86 140 L34 140 C26 128 14 104 14 68 C14 38 30 16 60 16 Z"
+                  fill="currentColor" stroke="#0B0A12" stroke-width="7" stroke-linejoin="round"/>
+                <path d="M36 60 L56 72 M84 60 L64 72" stroke="#0B0A12" stroke-width="7" stroke-linecap="round" fill="none"/>
+                <path d="M36 76 L54 72 L54 84 L36 80 Z" fill="#0B0A12"/>
+                <path d="M84 76 L66 72 L66 84 L84 80 Z" fill="#0B0A12"/>
+                <rect x="42" y="106" width="36" height="16" rx="4" fill="#ffffff" stroke="#0B0A12" stroke-width="4"/>
+                <line x1="54" y1="106" x2="54" y2="122" stroke="#0B0A12" stroke-width="3"/>
+                <line x1="66" y1="106" x2="66" y2="122" stroke="#0B0A12" stroke-width="3"/>
+              </svg>
+            </div>
+            <div class="pick-name angry-name">RAGE · 战斗</div>
+            <div class="pick-hint">连点击打</div>
+          </div>
+
+          <div class="pick-alien friendly-side" id="friendlySide">
+            <div class="pick-hp-label"><span class="k">CHILL</span><span class="v" id="chillText">按住蓄力</span></div>
+            <div class="hpbar pick-hp"><div class="fill" id="chillFill" style="width:0"></div><div class="ticks"></div></div>
+            <div class="alien-pixel" id="friendlyAlien" aria-label="友好外星人">
+              <svg class="alien-svg" viewBox="0 0 120 150" width="104" height="130">
+                <path d="M54 22 L48 10 M66 22 L72 10" stroke="#0B0A12" stroke-width="6" stroke-linecap="round" fill="none"/>
+                <circle cx="48" cy="7" r="6" fill="currentColor" stroke="#0B0A12" stroke-width="4"/>
+                <circle cx="72" cy="7" r="6" fill="currentColor" stroke="#0B0A12" stroke-width="4"/>
+                <path d="M60 16 C90 16 106 38 106 68 C106 104 94 128 86 140 L34 140 C26 128 14 104 14 68 C14 38 30 16 60 16 Z"
+                  fill="currentColor" stroke="#0B0A12" stroke-width="7" stroke-linejoin="round"/>
+                <circle cx="42" cy="74" r="11" fill="#0B0A12"/>
+                <circle cx="78" cy="74" r="11" fill="#0B0A12"/>
+                <circle cx="45" cy="71" r="3.5" fill="#ffffff"/>
+                <circle cx="81" cy="71" r="3.5" fill="#ffffff"/>
+                <path d="M42 108 C52 120 68 120 78 108" fill="none" stroke="#0B0A12" stroke-width="6" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="pick-name friendly-name">CHILL · 自由</div>
+            <div class="pick-hint">长按揉捏</div>
+          </div>
+        </div>
+
+        <button class="jelly dark mode-back" data-goto="home">← 返回首页</button>
+      </section>
+
+      <!-- ================= ③ 游戏悬浮 HUD ================= -->
+      <section class="screen" id="screen-game" data-name="game">
+        <!-- 现实世界层 -->
+        <div class="ar-scene" id="arScene">
+          <div class="ar-reality"><div class="grid"></div></div>
+          <div class="ar-person"><div class="head"></div><div class="body"></div></div>
+          <div class="ar-lockbox">
+            <span class="corner c1"></span><span class="corner c2"></span>
+            <span class="corner c3"></span><span class="corner c4"></span>
+            <span class="tag" id="lockTag">锁定 TARGET · 2.4m</span>
+          </div>
+          <div class="crosshair"><span class="dot"></span></div>
+        </div>
+
+        <!-- 虚拟 UI 层 -->
+        <div class="hud">
+          <div class="hud-top">
+            <div class="chip mode" id="chipMode">⚔ 攻击</div>
+            <div class="chip score">SCORE <b id="scoreVal">0</b></div>
+            <div class="chip combo" id="chipCombo">COMBO ×0</div>
+          </div>
+
+          <div class="enemy-hp">
+            <div class="hp-label"><span class="k">对手 HP</span><span class="v" id="enemyHpText">5 / 5</span></div>
+            <div class="hpbar"><div class="fill" id="enemyHpFill"></div><div class="ticks"></div><div class="flash" id="enemyHpFlash"></div></div>
+          </div>
+          <div class="self-hp">
+            <div class="hpbar"><div class="fill"></div><div class="ticks"></div></div>
+          </div>
+
+          <div class="rank-mini panel tagged" data-tag="榜单">
+            <div class="t">TOP 3</div>
+            <div class="row"><span>1. 涂鸦王</span><b>9870</b></div>
+            <div class="row"><span>2. 墨点怪</span><b>8120</b></div>
+            <div class="row"><span>3. 果冻仔</span><b>6650</b></div>
+          </div>
+
+          <div class="throw-tray">
+            <div class="cap"><span>投掷物 · THROWABLE</span><b id="trayCap">箭矢 ARROW</b></div>
+            <div class="tray-row" id="tray"></div>
+          </div>
+
+          <button class="jelly orange throw-btn" id="throwBtn">发射 THROW</button>
+        </div>
+      </section>
+
+      <!-- ================= ④ 结算榜单 ================= -->
+      <section class="screen" id="screen-result" data-name="result">
+        <div class="halftone-layer"></div>
+        <div class="result-badge">
+          <div class="big">WIN <b>!</b></div>
+        </div>
+
+        <div class="result-stats">
+          <div class="stat panel"><div class="n" id="rScore">0</div><div class="l">得分 SCORE</div></div>
+          <div class="stat panel"><div class="n" id="rCombo">0</div><div class="l">最高连击</div></div>
+          <div class="stat panel"><div class="n" id="rRank">#1</div><div class="l">排名 RANK</div></div>
+        </div>
+
+        <div class="rank-panel">
+          <div class="head">🏆 排行榜 · LEADERBOARD</div>
+          <div class="rank-list" id="rankList"></div>
+        </div>
+
+        <div class="result-actions">
+          <button class="jelly green" id="btnAgain">再来一局</button>
+          <button class="jelly dark" data-goto="mode">返回模式</button>
+        </div>
+      </section>
+
+    </div><!-- /viewport -->
+  </div><!-- /phone -->
+
+  <!-- 风格规范 -->
+  <div class="styleguide" id="styleGuide" style="display:none">
+    <h3>🎨 设计规范 · DESIGN TOKENS</h3>
+    荧光撞色：<div class="swatches">
+      <div class="sw g" title="荧光亮绿 #7CFF4F"></div>
+      <div class="sw p" title="荧光玫红 #FF3DF0"></div>
+      <div class="sw o" title="亮橙 #FF9A1F"></div>
+      <div class="sw c" title="点缀青 #3EE6FF"></div>
+    </div>
+    <div>· 背景：墨黑 <code>#0B0A12</code> + 半调网点暗纹（径向圆点）</div>
+    <div>· 面板：深色半调 <code>#181428</code>，边框不规则涂鸦感</div>
+    <div>· 按钮：大圆角果冻立体（内凹阴影 + 顶部高光 + 底部投影）</div>
+    <div>· 字体：粗厚无衬线（Arial Black / Impact），中文为主 + 英文涂鸦点缀</div>
+    <div>· AR：虚拟图层高饱和荧光，实景层灰暗去饱和，锚定框半透明</div>
+    <div>· 移植：骷髅位图 → Skull.png；投掷物图标 → Throwables/Previews/*.png</div>
+  </div>
+
+<script>
+/* ============================================================
+   EARTH OL — UI 模拟器交互脚本
+   ============================================================ */
+(function(){
+  "use strict";
+
+  /* ---------- 设计令牌（与 CSS :root 对应，供 JS 取色） ---------- */
+  const C = { green:"#7CFF4F", pink:"#FF3DF0", orange:"#FF9A1F", cyan:"#3EE6FF", ink:"#0B0A12" };
+  const SPLAT_COLORS = [C.green, C.pink, C.orange, C.cyan];
+
+  /* ---------- 骷髅像素位图 ----------
+     # = 骨白  o = 眼窝(玫红发光)  n = 鼻洞  t = 牙缝  . = 透明
+     —— 与项目 Assets/Resources/CartoonJelly/Skull.png 对应，可替换为真实贴图 */
+  const SKULL_MAP = [
+    ".........####.........",
+    ".......########.......",
+    "......##########......",
+    ".....############.....",
+    "....##############....",
+    "...################...",
+    "...################...",
+    "...####ooo##ooo####...",
+    "...####ooo##ooo####...",
+    "...####ooo##ooo####...",
+    "...################...",
+    "...################...",
+    "....##############....",
+    "....######nn######....",
+    "....######nn######....",
+    ".....############.....",
+    ".....###t####t###.....",
+    ".....###t####t###.....",
+    "......##########......",
+    ".......########.......",
+    ".........####.........",
+  ];
+
+  /* ---------- 外星人像素位图（搭档选择） ----------
+     # = 身体  b = 眉(深)  e = 眼  w = 高光  t = 牙  m = 嘴  . = 透明 */
+  const ANGRY_MAP = [
+    "....#.#....",
+    "....#.#....",
+    "...#####...",
+    "..#######..",
+    ".#########.",
+    "###########",
+    "#bb#####bb#",
+    "#ee#####ee#",
+    "###########",
+    ".#########.",
+    "..mtttttm..",
+    ".#########.",
+    "..#######..",
+    "....###....",
+  ];
+  const FRIENDLY_MAP = [
+    "....#.#....",
+    "....#.#....",
+    "...#####...",
+    "..#######..",
+    ".#########.",
+    "###########",
+    "#ew#####we#",
+    "#ee#####ee#",
+    "###########",
+    ".#########.",
+    "..m#####m..",
+    ".#########.",
+    "..#######..",
+    "....###....",
+  ];
+
+  /* ---------- 投掷物数据（对应 Throwables 目录） ---------- */
+  const THROWABLES = [
+    { id:"arrow", name:"箭矢", en:"ARROW",  icon:"🏹", color:C.green  },
+    { id:"brain", name:"大脑", en:"BRAIN",  icon:"🧠", color:C.pink   },
+    { id:"cube",  name:"果冻", en:"CUBE",   icon:"🧊", color:C.cyan   },
+    { id:"sign",  name:"路牌", en:"SIGN",   icon:"🛑", color:C.orange },
+    { id:"hand",  name:"粘手", en:"HAND",   icon:"🖐️", color:C.pink   },
+  ];
+
+  /* ---------- 榜单样本 ---------- */
+  const LEADERS = [
+    { rank:1, name:"校园涂鸦王", score:9870 },
+    { rank:2, name:"墨点喷射怪", score:8120 },
+    { rank:3, name:"果冻泡泡仔", score:6650 },
+    { rank:4, name:"路牌狂人",   score:5400 },
+    { rank:5, name:"解压小分队", score:4310 },
+    { rank:6, name:"宿舍卷王",   score:2980 },
+    { rank:7, name:"教学楼NPC",  score:1540 },
+  ];
+
+  /* ---------- 状态 ---------- */
+  const state = {
+    homeHp: 5, homeMax: 5,        // 骷髅门血量
+    enemyHp: 5, enemyMax: 5,      // 对战血量
+    score: 0, combo: 0, bestCombo: 0,
+    selected: 0,                  // 当前投掷物
+    locked: false,                // 破门后锁定输入
+  };
+
+  /* ---------- DOM ---------- */
+  const $ = (s, r=document) => r.querySelector(s);
+  const screens = Array.from(document.querySelectorAll(".screen"));
+  const skullEl = $("#skull");
+  const skullCrack = $("#skullCrack");
+  const crackPaths = Array.from(skullCrack.querySelectorAll("path"));
+  const breakFlash = $("#breakFlash");
+
+  /* ============ 骨架搭建 ============ */
+  function buildSkull(){
+    skullEl.innerHTML = "";
+    SKULL_MAP.forEach(row => {
+      for (const ch of row){
+        const cell = document.createElement("i");
+        cell.className = "cell " + ({ "#":"b", "o":"e", "n":"n", "t":"t", ".":"x" }[ch] || "x");
+        skullEl.appendChild(cell);
+      }
+    });
+  }
+
+  function buildTicks(){
+    document.querySelectorAll(".hpbar .ticks").forEach(ticks => {
+      ticks.innerHTML = "";
+      for (let i=0;i<5;i++) ticks.appendChild(document.createElement("i"));
+    });
+  }
+
+  function buildTray(){
+    const tray = $("#tray");
+    tray.innerHTML = "";
+    THROWABLES.forEach((t,i)=>{
+      const el = document.createElement("div");
+      el.className = "t-card" + (i===0 ? " sel":"");
+      el.innerHTML = `<span class="ic">${t.icon}</span><span class="nm">${t.name}</span>`;
+      el.addEventListener("click", ()=> selectThrowable(i));
+      tray.appendChild(el);
+    });
+  }
+
+  function buildRank(){
+    const list = $("#rankList");
+    list.innerHTML = "";
+    const rows = LEADERS.map(l => ({ ...l, me:false }));
+    const me = { rank: state.bestCombo>=5?1: state.bestCombo>=3?3: state.score>0?6:7, name:"我 · YOU", score: state.score, me:true };
+    // 插入“我”并重排序
+    rows.push(me);
+    rows.sort((a,b)=> b.score - a.score);
+    rows.forEach((r,i)=>{
+      r.rank = i+1;
+      const el = document.createElement("div");
+      el.className = "rank-row" + (r.me ? " me":"");
+      const medal = r.rank===1?"🥇": r.rank===2?"🥈": r.rank===3?"🥉": r.rank;
+      el.innerHTML = `<span class="rk">${medal}</span><span class="nm">${r.name}</span><span class="sc">${r.score}</span>`;
+      list.appendChild(el);
+    });
+    $("#rRank").textContent = "#" + (rows.findIndex(r=>r.me)+1);
+  }
+
+  /* ============ 血条更新 ============ */
+  function setHpBar(fillSel, flashSel, textSel, cur, max){
+    const fill = $(fillSel); if(!fill) return;
+    const pct = Math.max(0, Math.min(1, cur/max)) * 100;
+    fill.style.width = pct + "%";
+    fill.classList.toggle("low", cur/max <= 0.6 && cur/max > 0.3);
+    fill.classList.toggle("crit", cur/max <= 0.3);
+    const text = $(textSel); if(text) text.textContent = cur + " / " + max;
+    const flash = $(flashSel); if(flash){ flash.classList.remove("hit"); void flash.offsetWidth; flash.classList.add("hit"); }
+  }
+
+  /* ============ 墨水泼溅 ============ */
+  function splat(container, x, y, color){
+    const s = document.createElement("div");
+    s.className = "splat";
+    s.style.left = x + "px";
+    s.style.top = y + "px";
+    s.style.color = color || SPLAT_COLORS[Math.floor(Math.random()*SPLAT_COLORS.length)];
+    s.style.setProperty("--rot", (Math.random()*360) + "deg");
+    s.style.width = s.style.height = (40 + Math.random()*50) + "px";
+    // 喷溅小墨点
+    const dots = 3 + Math.floor(Math.random()*3);
+    for(let i=0;i<dots;i++){
+      const d = document.createElement("span");
+      d.className = "drop";
+      const sz = 8 + Math.random()*14;
+      d.style.width = d.style.height = sz + "px";
+      d.style.left = (10 + Math.random()*80) + "%";
+      d.style.top = (10 + Math.random()*80) + "%";
+      d.style.setProperty("--rot", (Math.random()*360) + "deg");
+      s.appendChild(d);
+    }
+    container.appendChild(s);
+    setTimeout(()=> s.remove(), 650);
+  }
+
+  /* 装饰性静态泼溅（屏幕四角） */
+  function decoSplats(screen){
+    const w = screen.clientWidth, h = screen.clientHeight;
+    const spots = [
+      {x:w*0.08, y:h*0.12, c:C.pink, r:14},
+      {x:w*0.90, y:h*0.20, c:C.green, r:-20},
+      {x:w*0.10, y:h*0.85, c:C.orange, r:30},
+      {x:w*0.88, y:h*0.78, c:C.cyan, r:-40},
+    ];
+    spots.forEach(sp=>{
+      const s = document.createElement("div");
+      s.className = "splat deco";
+      s.style.left = sp.x + "px"; s.style.top = sp.y + "px";
+      s.style.color = sp.c; s.style.setProperty("--rot", sp.r + "deg");
+      s.style.width = s.style.height = (50 + Math.random()*40) + "px";
+      screen.appendChild(s);
+    });
+  }
+
+  /* ============ 伤害数字 ============ */
+  function dmgNum(container, x, y, txt, color){
+    const d = document.createElement("div");
+    d.className = "dmg";
+    d.textContent = txt;
+    d.style.left = x + "px"; d.style.top = y + "px";
+    d.style.color = color || "#fff";
+    container.appendChild(d);
+    setTimeout(()=> d.remove(), 700);
+  }
+
+  /* ============ 屏幕切换 ============ */
+  function showScreen(id){
+    const sid = id.startsWith("screen-") ? id : "screen-" + id;
+    const key = sid.slice("screen-".length);
+    screens.forEach(s => s.classList.toggle("on", s.id === sid));
+    document.querySelectorAll(".devbar button[data-goto]").forEach(b =>
+      b.classList.toggle("active", b.dataset.goto === key));
+    if (key === "mode") resetMode();
+  }
+
+  /* ============ 骷髅破门流程 ============ */
+  function crackLevel(){
+    // 血量越低裂纹越多
+    const n = state.homeMax - state.homeHp; // 0..5
+    crackPaths.forEach((p,i)=>{
+      p.style.opacity = (i < Math.min(n, crackPaths.length)) ? "1" : "0";
+    });
+    skullCrack.style.opacity = n>0 ? "1" : "0";
+  }
+
+  function hitSkull(e){
+    if (state.locked) return;
+    if (state.homeHp <= 0) return;
+
+    const rect = $("#screen-home").getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    state.homeHp--;
+    setHpBar("#skullHpFill", "#skullHpFlash", "#skullHpText", state.homeHp, state.homeMax);
+    splat($("#screen-home"), x, y);
+    dmgNum($("#screen-home"), x, y, "-1 HP", C.orange);
+
+    // 骷髅震动
+    skullEl.classList.remove("shake"); void skullEl.offsetWidth; skullEl.classList.add("shake");
+    crackLevel();
+
+    if (state.homeHp <= 0){
+      state.locked = true;
+      shatterSkull();
+    }
+  }
+
+  function shatterSkull(){
+    // 贴纸爆发：整体放大 + 旋转 + 淡出
+    skullEl.classList.add("shatter");
+
+    // 全屏泼溅 + 白光
+    const home = $("#screen-home");
+    for(let i=0;i<8;i++){
+      splat(home, Math.random()*home.clientWidth, Math.random()*home.clientHeight);
+    }
+    breakFlash.classList.add("go");
+
+    setTimeout(()=>{
+      // 重置骷髅门，进入模式选择
+      resetHome();
+      showScreen("screen-mode");
+      breakFlash.classList.remove("go");
+    }, 800);
+  }
+
+  function resetHome(){
+    state.homeHp = state.homeMax;
+    state.locked = false;
+    setHpBar("#skullHpFill", "#skullHpFlash", "#skullHpText", state.homeHp, state.homeMax);
+    skullEl.classList.remove("shatter");
+    crackLevel();
+  }
+
+  /* ============ 搭档选择：外星人 ============ */
+  let rageHp = 5;
+  let chillP = 0;
+  let chilling = false;
+  let chillRaf = 0;
+  let chillStart = 0;
+
+  function buildAlien(el, map){
+    el.innerHTML = "";
+    map.forEach(row => {
+      for (const ch of row){
+        const cell = document.createElement("i");
+        cell.className = "cell " + ({ "#":"ab","b":"abrow","e":"aeye","w":"aglint","t":"atooth","m":"amouth",".":"x" }[ch] || "x");
+        el.appendChild(cell);
+      }
+    });
+  }
+
+  function resetMode(){
+    rageHp = 5;
+    chillP = 0; chilling = false;
+    cancelAnimationFrame(chillRaf);
+    setHpBar("#rageFill", null, "#rageText", rageHp, 5);
+    const chillFill = $("#chillFill");
+    if (chillFill) chillFill.style.width = "0%";
+    const chillText = $("#chillText");
+    if (chillText) chillText.textContent = "按住蓄力";
+    const fr = $("#friendlyAlien");
+    if (fr) fr.style.transform = "";
+    const an = $("#angryAlien");
+    if (an) an.classList.remove("press");
+  }
+
+  function tapRage(e){
+    if (rageHp <= 0) return;
+    if (e.cancelable) e.preventDefault();
+    rageHp--;
+    setHpBar("#rageFill", null, "#rageText", rageHp, 5);
+    const el = $("#angryAlien");
+    el.classList.remove("press"); void el.offsetWidth; el.classList.add("press");
+    const rect = $("#screen-mode").getBoundingClientRect();
+    const x = e.clientX - rect.left, y = e.clientY - rect.top;
+    splat($("#screen-mode"), x, y, C.pink);
+    dmgNum($("#screen-mode"), x, y, "-1", C.pink);
+    if (rageHp <= 0){
+      setTimeout(()=> enterGame("attack"), 360);
+    }
+  }
+
+  function startChill(e){
+    if (chilling || chillP >= 1) return;
+    if (e.cancelable) e.preventDefault();
+    chilling = true; chillStart = performance.now();
+    const side = $("#friendlySide");
+    if (e.pointerId != null && side.setPointerCapture){ try { side.setPointerCapture(e.pointerId); } catch(_){} }
+    const fr = $("#friendlyAlien");
+    const step = () => {
+      if (!chilling) return;
+      const p = Math.min(1, (performance.now() - chillStart) / 1000);
+      chillP = p;
+      $("#chillFill").style.width = (p*100) + "%";
+      $("#chillText").textContent = p >= 1 ? "松手进入!" : "蓄力 " + Math.round(p*100) + "%";
+      fr.style.transform = `scale(${1 + p*0.18}, ${1 - p*0.22}) translateY(${p*5}px)`;
+      if (p >= 1){
+        chilling = false;
+        enterGame("free");
+        return;
+      }
+      chillRaf = requestAnimationFrame(step);
+    };
+    chillRaf = requestAnimationFrame(step);
+  }
+
+  function endChill(){
+    if (!chilling) return;
+    chilling = false;
+    cancelAnimationFrame(chillRaf);
+    if (chillP < 1){
+      chillP = 0;
+      $("#chillFill").style.width = "0%";
+      $("#chillText").textContent = "按住蓄力";
+      $("#friendlyAlien").style.transform = "";
+    }
+  }
+
+  /* ============ 模式选择 ============ */
+  function enterGame(mode){
+    $("#chipMode").innerHTML = mode==="attack" ? "⚔ 攻击" : "🫧 自由";
+    resetGame();
+    showScreen("screen-game");
+  }
+
+  /* ============ 游戏流程 ============ */
+  function selectThrowable(i){
+    state.selected = i;
+    const cards = Array.from($("#tray").children);
+    cards.forEach((c,idx)=> c.classList.toggle("sel", idx===i));
+    $("#trayCap").textContent = THROWABLES[i].name + " " + THROWABLES[i].en;
+  }
+
+  function resetGame(){
+    state.enemyHp = state.enemyMax;
+    state.score = 0; state.combo = 0; state.bestCombo = 0;
+    setHpBar("#enemyHpFill", "#enemyHpFlash", "#enemyHpText", state.enemyHp, state.enemyMax);
+    $("#scoreVal").textContent = "0";
+    $("#chipCombo").textContent = "COMBO ×0";
+    $("#lockTag").textContent = "锁定 TARGET · 2.4m";
+    selectThrowable(0);
+  }
+
+  function throwAt(e){
+    if (state.enemyHp <= 0) return;
+    const rect = $("#arScene").getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const t = THROWABLES[state.selected];
+    state.enemyHp--;
+    state.combo++;
+    state.bestCombo = Math.max(state.bestCombo, state.combo);
+    state.score += (120 + state.combo*17);
+
+    setHpBar("#enemyHpFill", "#enemyHpFlash", "#enemyHpText", state.enemyHp, state.enemyMax);
+    splat($("#screen-game"), x, y, t.color);
+    dmgNum($("#screen-game"), x, y, "-1", t.color);
+
+    // 命中标记
+    const hm = document.createElement("div");
+    hm.className = "hitmark go";
+    hm.textContent = "✕";
+    hm.style.left = x + "px"; hm.style.top = y + "px";
+    $("#screen-game").appendChild(hm);
+    setTimeout(()=> hm.remove(), 520);
+
+    $("#scoreVal").textContent = state.score;
+    $("#chipCombo").textContent = "COMBO ×" + state.combo;
+    $("#lockTag").textContent = "命中 " + t.name + " · " + (state.combo) + "连击";
+
+    if (state.enemyHp <= 0){
+      setTimeout(()=> showResult(), 420);
+    }
+  }
+
+  function showResult(){
+    $("#rScore").textContent = state.score;
+    $("#rCombo").textContent = state.bestCombo;
+    buildRank();
+    showScreen("screen-result");
+  }
+
+  /* ============ 事件绑定 ============ */
+  function bind(){
+    // 工具条跳转
+    document.querySelectorAll("[data-goto]").forEach(b => {
+      b.addEventListener("click", ()=> showScreen(b.dataset.goto));
+    });
+    $("#btnReset").addEventListener("click", ()=>{
+      resetHome();
+      resetGame();
+      showScreen("screen-home");
+    });
+    $("#btnStyle").addEventListener("click", ()=>{
+      const g = $("#styleGuide");
+      g.style.display = g.style.display === "none" ? "" : "none";
+    });
+
+    // 骷髅门
+    $("#skullWrap").addEventListener("pointerdown", hitSkull);
+
+    // 搭档选择：凶狠外星人连点 / 友好外星人长按
+    $("#angrySide").addEventListener("pointerdown", tapRage);
+    $("#friendlySide").addEventListener("pointerdown", startChill);
+    ["pointerup","pointercancel","lostpointercapture"].forEach(n =>
+      $("#friendlySide").addEventListener(n, endChill));
+
+    // 游戏投掷
+    $("#throwBtn").addEventListener("click", ()=>{
+      const rect = $("#arScene").getBoundingClientRect();
+      const ev = { clientX: rect.left + rect.width/2, clientY: rect.top + rect.height*0.44 };
+      throwAt(ev);
+    });
+    $("#arScene").addEventListener("pointerdown", throwAt);
+
+    // 结算
+    $("#btnAgain").addEventListener("click", ()=> enterGame("attack"));
+  }
+
+  /* ============ 初始化 ============ */
+  function init(){
+    buildTicks();
+    buildTray();
+    buildRank();
+    decoSplats($("#screen-home"));
+    decoSplats($("#screen-mode"));
+    decoSplats($("#screen-game"));
+    setHpBar("#skullHpFill", null, "#skullHpText", state.homeHp, state.homeMax);
+    setHpBar("#enemyHpFill", null, "#enemyHpText", state.enemyHp, state.enemyMax);
+    resetMode();
+    bind();
+    showScreen("home");
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+})();
+</script>
+</body>
+</html>
