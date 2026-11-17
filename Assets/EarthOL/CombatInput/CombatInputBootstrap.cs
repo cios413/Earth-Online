@@ -38,7 +38,7 @@ namespace EarthOL.CombatInput
                 bootstrap = FindObjectOfType<ARCoreMainSceneBootstrap>();
                 yield return null;
             }
-            while (bootstrap.ARCamera == null || bootstrap.PoseTracker == null ||
+            while (bootstrap.ARCamera == null || bootstrap.PersonTracking == null ||
                    bootstrap.Spawner == null || bootstrap.PersonDeformer == null)
                 yield return null;
 
@@ -51,8 +51,9 @@ namespace EarthOL.CombatInput
             var items = BuildItems(bootstrap.Spawner.Catalog);
             backpack.Configure(items, state);
             swipeDeform.Configure(bootstrap.PersonDeformer);
-            maskOverlay.Configure(bootstrap.PoseTracker, bootstrap.ARCamera);
-            router.Configure(bootstrap.PoseTracker, bootstrap.PersonDeformer, bootstrap.Spawner,
+            maskOverlay.Configure(bootstrap.PersonTracking, bootstrap.ARCamera);
+            maskOverlay.enabled = false;   // 半透明人形 mask 已关闭
+            router.Configure(bootstrap.PersonTracking, bootstrap.PersonDeformer, bootstrap.Spawner,
                 state, backpack, swipeDeform, bootstrap.ARCamera);
 
             state.BagOpened += OnBagOpened;

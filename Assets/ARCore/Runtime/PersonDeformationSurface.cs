@@ -5,13 +5,12 @@ using UnityEngine;
 
 namespace EarthOL.ARCore
 {
-    /// <summary>Uses the original camera-warp spring on a padded region around the tracked proxies.</summary>
+    /// <summary>基于 2D 姿态的相机 warp 形变（按压/挥扫），不再做连续深度估计。</summary>
     [DefaultExecutionOrder(200)]
     public sealed class PersonDeformationSurface : MonoBehaviour
     {
         Camera m_Camera;
-        BodyProxyRig m_Rig;
-        BodyPoseTracker m_Tracker;
+        PersonTrackingManager m_PersonTracking;
         GameObject m_Surface;
         PokeWarpDeformer m_Warp;
         Renderer m_Renderer;
@@ -19,26 +18,22 @@ namespace EarthOL.ARCore
         bool m_RegionReady;
         bool m_PointerHeld;
         int m_PointerId;
+        public bool PressEnabled = true;
         Vector3 m_SwipeOffset;
         Quaternion m_SwipeTilt = Quaternion.identity;
         float m_SurfaceDepth = 0.45f;
 
-        [Tooltip("按压攻击对应的攻击 ID，按压真正触发形变后上报。")]
-        [SerializeField] private string pressAttackId = "press";
-
         public Rect Region => m_Region;
         public PokeWarpDeformer Warp => m_Warp;
-        public string PressAttackId { get => pressAttackId; set => pressAttackId = value; }
 
-        public void Configure(Camera camera, BodyProxyRig rig, BodyPoseTracker tracker)
+        public void Configure(Camera camera, PersonTrackingManager tracking)
         {
             m_Camera = camera;
-            m_Rig = rig;
-            m_Tracker = tracker;
+            m_PersonTracking = tracking;
             m_Surface = new GameObject("Person camera deformation region");
             m_Surface.transform.SetParent(camera.transform, false);
             m_Surface.SetActive(false);
-            m_Surface.layer = 2; // A visual overlay, excluded from ordinary pointer raycasts.
+            m_Surface.layer = 2;
             m_Warp = m_Surface.AddComponent<PokeWarpDeformer>();
             m_Warp.planeWidth = m_Warp.planeHeight = 1f;
             m_Warp.planeInXZ = false;
@@ -59,21 +54,35 @@ namespace EarthOL.ARCore
             m_Renderer.enabled = false;
         }
 
+        PersonPoseData CurrentPerson() => m_PersonTracking != null ? m_PersonTracking.BestPerson() : null;
+
         private void LateUpdate()
         {
             if (m_Warp == null || m_Camera == null) return;
             RefreshRegion(Time.unscaledDeltaTime);
             UpdateBodyMask();
+
+            // Li 方式：形变输入由本组件自己读取触摸。
+            if (PressEnabled && BodyPointerFrame.TryRead(out var frame))
+            {
+                if (frame.down) TryBegin(frame.id, frame.position);
+                if (m_PointerHeld && frame.id == m_PointerId)
+                {
+                    if (frame.released || frame.canceled) EndPointer();
+                    else if (frame.held) Drag(frame.id, frame.position);
+                }
+            }
+            else if (m_PointerHeld) EndPointer();
+
             m_Renderer.enabled = m_Surface.activeInHierarchy && (m_Warp.HasActivePokes || m_Warp.HasActiveSwipeShear);
-            if (m_Tracker != null) m_Tracker.DeformationGestureActive =
-                m_PointerHeld || m_Warp.HasActivePokes || m_Warp.HasActiveSwipeShear;
         }
 
         public bool RefreshRegion(float deltaTime)
         {
             Rect desired = default;
-            bool valid = m_Tracker != null && m_Tracker.HasPose &&
-                (TryGetPoseRegion(m_Tracker.Current, out desired) || TryGetRegion(m_Camera, m_Rig, out desired));
+            var person = CurrentPerson();
+            bool valid = person != null && TryGetPoseRegion(person.AsPoseView(), out desired);
+
             if (valid)
             {
                 if (!m_Warp.HasActivePokes)
@@ -96,6 +105,7 @@ namespace EarthOL.ARCore
                 m_RegionReady = false;
                 return false;
             }
+
             float depth = Mathf.Max(0.45f, m_Camera.nearClipPlane + 0.05f);
             m_SurfaceDepth = depth;
             Vector2 center = m_Region.center;
@@ -115,35 +125,38 @@ namespace EarthOL.ARCore
 
         public bool TryBegin(int pointerId, Vector2 screenPosition)
         {
-            if (!m_RegionReady || m_Tracker == null || !m_Tracker.HasPose || !m_Rig.HasTrackedPart) return false;
+            if (!m_RegionReady || CurrentPerson() == null) return false;
             Vector3 viewport = m_Camera.ScreenToViewportPoint(screenPosition);
             if (!m_Region.Contains(new Vector2(viewport.x, viewport.y))) return false;
             EndPointer();
             m_PointerHeld = true;
-            m_Tracker.DeformationGestureActive = true;
             m_PointerId = pointerId;
             m_Warp.BeginAt(pointerId, PointOnSurface(screenPosition));
             m_Renderer.enabled = true;
-
             Debug.Log("[PersonWarp] 人物周围区域开始形变，区域=" + m_Region);
             return true;
         }
 
-        /// <summary>拖拽中的手指位置更新（由攻击输入路由调用）。</summary>
         public void Drag(int pointerId, Vector2 screenPosition)
         {
             if (m_PointerHeld && pointerId == m_PointerId)
                 m_Warp.DragAt(pointerId, PointOnSurface(screenPosition));
         }
 
-        /// <summary>挥扫攻击的整体偏移/倾斜（由 SwipeDeformController 驱动并回弹）。</summary>
+        public void EndPointer()
+        {
+            if (!m_PointerHeld) return;
+            m_PointerHeld = false;
+            if (m_Warp != null) m_Warp.OnPokeEnd(m_PointerId);
+            Debug.Log("[PersonWarp] 松手，开始弹簧回弹。");
+        }
+
         public void SetSwipeTransform(Vector3 offset, Quaternion tilt)
         {
             m_SwipeOffset = offset;
             m_SwipeTilt = tilt;
         }
 
-        /// <summary>在屏幕位置对应的表面点施加一次挥扫冲击 poke。</summary>
         public void SwipePokeAt(Vector2 screenPosition, float strength)
         {
             if (m_Warp == null || m_Camera == null) return;
@@ -153,10 +166,10 @@ namespace EarthOL.ARCore
         void UpdateBodyMask()
         {
             var segments = new List<PokeWarpDeformer.BodySegment>();
-
-            if (m_Tracker != null && m_Tracker.HasPose && m_Camera != null && m_Surface != null)
+            var person = CurrentPerson();
+            if (person != null && m_Camera != null && m_Surface != null)
             {
-                var pose = m_Tracker.Current;
+                var pose = person.AsPoseView();
                 float aspect = (float)m_Camera.pixelWidth / Mathf.Max(1f, m_Camera.pixelHeight);
 
                 if (BodyPoseGeometry.TryFitHead(pose, aspect, out var headCenter, out var headRadius))
@@ -172,7 +185,6 @@ namespace EarthOL.ARCore
                     Vector2 h = KeypointToLocal(hips);
                     float tr = RadiusToLocal(shoulders, torsoRadius);
                     segments.Add(new PokeWarpDeformer.BodySegment(s, h, tr * 0.85f));
-
                     float limbR = tr * 0.5f;
                     AddLimb(pose, segments, 5, 7, limbR);
                     AddLimb(pose, segments, 7, 9, limbR * 0.8f);
@@ -187,7 +199,6 @@ namespace EarthOL.ARCore
 
             if (segments.Count > 0)
                 m_Warp.SetBodyMask(segments.ToArray(), 0.05f);
-            // 否则保留上一次的人形 mask，避免追踪短暂丢失时把形变区清成 0
         }
 
         Vector2 KeypointToLocal(Vector2 viewportPoint)
@@ -212,60 +223,10 @@ namespace EarthOL.ARCore
             segments.Add(new PokeWarpDeformer.BodySegment(a, b, radius));
         }
 
-        public void EndPointer()
-        {
-            if (!m_PointerHeld) return;
-            m_PointerHeld = false;
-            if (m_Warp != null) m_Warp.OnPokeEnd(m_PointerId);
-            Debug.Log("[PersonWarp] 松手，开始弹簧回弹。");
-        }
-
-        private Vector3 PointOnSurface(Vector2 screenPosition)
-        {
-            Vector3 viewport = m_Camera.ScreenToViewportPoint(screenPosition);
-            viewport.x = Mathf.Clamp(viewport.x, m_Region.xMin, m_Region.xMax);
-            viewport.y = Mathf.Clamp(viewport.y, m_Region.yMin, m_Region.yMax);
-            var ray = m_Camera.ViewportPointToRay(viewport);
-            var plane = new Plane(m_Surface.transform.forward, m_Surface.transform.position);
-            return plane.Raycast(ray, out float distance) ? ray.GetPoint(distance) : m_Surface.transform.position;
-        }
-
-        public static bool TryGetRegion(Camera camera, BodyProxyRig rig, out Rect region)
-        {
-            region = default;
-            if (camera == null || rig == null || !rig.HasTrackedPart) return false;
-            Vector2 min = Vector2.one * float.MaxValue, max = Vector2.one * float.MinValue;
-            bool any = false;
-            foreach (var part in rig.Parts)
-            {
-                if (!part.gameObject.activeInHierarchy) continue;
-                var collider = part.GetComponent<Collider>();
-                if (collider == null || !collider.enabled) continue;
-                var bounds = collider.bounds;
-                for (int i = 0; i < 8; i++)
-                {
-                    var point = bounds.center + Vector3.Scale(bounds.extents,
-                        new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
-                    Vector3 viewport = camera.WorldToViewportPoint(point);
-                    if (viewport.z <= camera.nearClipPlane) continue;
-                    min = Vector2.Min(min, viewport);
-                    max = Vector2.Max(max, viewport);
-                    any = true;
-                }
-            }
-            if (!any) return false;
-            Vector2 padding = new Vector2(Mathf.Max(0.06f, (max.x - min.x) * 0.35f), Mathf.Max(0.06f, (max.y - min.y) * 0.22f));
-            region = Rect.MinMaxRect(Mathf.Clamp01(min.x - padding.x), Mathf.Clamp01(min.y - padding.y),
-                Mathf.Clamp01(max.x + padding.x), Mathf.Clamp01(max.y + padding.y));
-            return region.width > 0.01f && region.height > 0.01f;
-        }
-
-        /// <summary>用全部关键点（头/躯干/四肢）计算覆盖整个人形的视口区域。</summary>
         static bool TryGetPoseRegion(BodyPoseResult pose, out Rect region)
         {
             region = default;
             if (pose.keypoints == null || pose.keypoints.Length == 0) return false;
-
             float minX = float.MaxValue, minY = float.MaxValue;
             float maxX = float.MinValue, maxY = float.MinValue;
             bool any = false;
@@ -278,19 +239,26 @@ namespace EarthOL.ARCore
                 any = true;
             }
             if (!any) return false;
-
             float padX = Mathf.Max(0.08f, (maxX - minX) * 0.25f);
             float padY = Mathf.Max(0.06f, (maxY - minY) * 0.12f);
-            region = Rect.MinMaxRect(
-                Mathf.Clamp01(minX - padX), Mathf.Clamp01(minY - padY),
+            region = Rect.MinMaxRect(Mathf.Clamp01(minX - padX), Mathf.Clamp01(minY - padY),
                 Mathf.Clamp01(maxX + padX), Mathf.Clamp01(maxY + padY));
             return region.width > 0.02f && region.height > 0.02f;
+        }
+
+        Vector3 PointOnSurface(Vector2 screenPosition)
+        {
+            Vector3 viewport = m_Camera.ScreenToViewportPoint(screenPosition);
+            viewport.x = Mathf.Clamp(viewport.x, m_Region.xMin, m_Region.xMax);
+            viewport.y = Mathf.Clamp(viewport.y, m_Region.yMin, m_Region.yMax);
+            var ray = m_Camera.ViewportPointToRay(viewport);
+            var plane = new Plane(m_Surface.transform.forward, m_Surface.transform.position);
+            return plane.Raycast(ray, out float distance) ? ray.GetPoint(distance) : m_Surface.transform.position;
         }
 
         private void OnDisable()
         {
             EndPointer();
-            if (m_Tracker != null) m_Tracker.DeformationGestureActive = false;
             if (m_Surface != null) m_Surface.SetActive(false);
             m_RegionReady = false;
         }

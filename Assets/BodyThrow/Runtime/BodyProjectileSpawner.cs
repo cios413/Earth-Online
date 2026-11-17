@@ -85,8 +85,7 @@ namespace EarthOL.BodyThrow
         private BodyProjectile Spawn(Vector3 origin, Vector3 direction)
         {
             var prefab = ProjectilePrefab;
-            if (ARCoreModeOverlay.BlocksWorldInput || arCamera == null || prefab == null || selectedTarget == null ||
-                !selectedTarget.gameObject.activeInHierarchy || !IsFinite(direction) ||
+            if (ARCoreModeOverlay.BlocksWorldInput || arCamera == null || prefab == null || !IsFinite(direction) ||
                 direction.sqrMagnitude < 0.000001f)
                 return null;
 
@@ -107,7 +106,7 @@ namespace EarthOL.BodyThrow
                 Quaternion.LookRotation(direction));
             m_ActiveProjectiles.Add(projectile);
             projectile.AttackId = CurrentAttackId;
-            projectile.Launch(selectedTarget, direction * throwSpeed);
+            projectile.Launch(null, direction * throwSpeed);
             return projectile;
         }
 

@@ -22,7 +22,7 @@ namespace EarthOL.CombatInput
 
         enum Phase { None, BackpackButton, ItemBarScroll, HoldCandidate, Hold, Press, Swipe, ThrowTap }
 
-        [SerializeField] BodyPoseTracker poseTracker;
+        [SerializeField] PersonTrackingManager personTracking;
         [SerializeField] PersonDeformationSurface personDeformer;
         [SerializeField] BodyProjectileSpawner spawner;
         [SerializeField] PlayerCombatState state;
@@ -47,11 +47,11 @@ namespace EarthOL.CombatInput
         float pendingThrowTime;
         Vector2 pendingThrowPosition;
 
-        public void Configure(BodyPoseTracker tracker, PersonDeformationSurface deformer, BodyProjectileSpawner projectileSpawner,
+        public void Configure(PersonTrackingManager tracking, PersonDeformationSurface deformer, BodyProjectileSpawner projectileSpawner,
             PlayerCombatState combatState, BackpackController backpackController,
             SwipeDeformController swipeDeformController, Camera camera)
         {
-            poseTracker = tracker;
+            personTracking = tracking;
             personDeformer = deformer;
             spawner = projectileSpawner;
             state = combatState;
@@ -94,11 +94,7 @@ namespace EarthOL.CombatInput
 
             if (phase == Phase.Press)
             {
-                if (personDeformer == null || !personDeformer.TryBegin(id, screenPos))
-                {
-                    phase = Phase.Swipe;
-                    wasInsideTarget = PointInsideTarget(screenPos);
-                }
+                // 按压形变由 PersonDeformationSurface 自己读取触摸（Li 方式）；这里只负责攻击上报。
             }
             else if (phase == Phase.Swipe)
             {
@@ -180,16 +176,13 @@ namespace EarthOL.CombatInput
                 case Phase.Press:
                     if (frame.held && moved)
                     {
-                        // 起手在目标上但发生了滑动 -> 取消按压，转为挥扫。
-                        personDeformer?.EndPointer();
+                        // 起手在目标上但发生了滑动 -> 转为挥扫。
                         phase = Phase.Swipe;
                         wasInsideTarget = false;
                         UpdateSwipeCrossing(frame.position, moveDelta);
                     }
-                    else if (frame.held) personDeformer?.Drag(pointerId, frame.position);
                     else if (frame.released || frame.canceled)
                     {
-                        personDeformer?.EndPointer();
                         phase = Phase.None;
                         if (!frame.canceled && IsTap())
                         {
@@ -231,7 +224,6 @@ namespace EarthOL.CombatInput
             {
                 lastTapTime = -999f;
                 pendingThrow = false;
-                if (poseTracker != null) poseTracker.TrySelectAt(screenPos);
                 return true;
             }
 
@@ -287,7 +279,13 @@ namespace EarthOL.CombatInput
 
         bool PointInsideTarget(Vector2 screenPos)
         {
-            return poseTracker != null && poseTracker.TryGetSelectedScreenRect(out var rect) && rect.Contains(screenPos);
+            var person = personTracking != null ? personTracking.BestPerson() : null;
+            if (person == null || arCamera == null) return false;
+            Vector2 min = arCamera.ViewportToScreenPoint(new Vector3(person.screenRect.xMin, person.screenRect.yMin, 0f));
+            Vector2 max = arCamera.ViewportToScreenPoint(new Vector3(person.screenRect.xMax, person.screenRect.yMax, 0f));
+            var rect = Rect.MinMaxRect(Mathf.Min(min.x, max.x), Mathf.Min(min.y, max.y),
+                Mathf.Max(min.x, max.x), Mathf.Max(min.y, max.y));
+            return rect.Contains(screenPos);
         }
 
     }

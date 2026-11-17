@@ -41,7 +41,7 @@ namespace EarthOL.Combat
             {
                 CreateAttack("press", "按压", string.Empty, "下", 10f, AttackType.BarehandPress),
                 CreateAttack("swipe", "挥打", string.Empty, "下", 8f, AttackType.BarehandSwipe),
-                CreateAttack("StickyHandHold", "手持粘粘手拍打", string.Empty, "下", 20f, AttackType.ItemHold)
+                CreateAttack("StickyHandHold", "手持粘粘手拍打", string.Empty, "下", 12f, AttackType.ItemHold)
             };
 
             if (catalog != null && catalog.entries != null && catalog.entries.Length > 0)

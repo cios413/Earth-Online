@@ -8,17 +8,28 @@ using UnityEngine.XR.Management;
 
 namespace EarthOL.ARCore
 {
-    /// <summary>Person tracking, invisible body depth, throwing and camera deformation share one AR session.</summary>
+    /// <summary>
+    /// 2D 人体姿态识别 + 贴图（Li 方式）；投掷仍使用一个固定深度的轻量 3D 代理。
+    /// </summary>
     [DisallowMultipleComponent]
     public sealed class ARCoreMainSceneBootstrap : MonoBehaviour
     {
         public const string SceneName = "ARCoreMainScene";
         public const string DeformSceneName = SceneName;
+
+        [Header("2D person detection / tracking")]
+        [SerializeField, Range(1f, 15f)] float personDetectionFps = 5f;
+        [SerializeField, Range(5f, 30f)] float personFlowFps = 15f;
+        [SerializeField, Range(0.3f, 3f)] float personLostSeconds = 1f;
+        [SerializeField] bool startPersonDetection = true;
+
         public Camera ARCamera { get; private set; }
-        public BodyProxyRig BodyRig { get; private set; }
         public BodyProjectileSpawner Spawner { get; private set; }
-        public BodyPoseTracker PoseTracker { get; private set; }
         public PersonDeformationSurface PersonDeformer { get; private set; }
+        public PersonTrackingManager PersonTracking { get; private set; }
+        public PoseDetectionManager DetectionManager { get; private set; }
+        public Cartoon2DCanvas CartoonCanvas { get; private set; }
+
         ARSession m_Session;
         XRGeneralSettings m_XRSettings;
         bool m_StartedXR;
@@ -26,10 +37,12 @@ namespace EarthOL.ARCore
         private IEnumerator Start()
         {
             BuildARCamera();
-            BuildBodyRig();
+            BuildPersonSystems();
             BuildProjectileSpawner();
+
             PersonDeformer = gameObject.AddComponent<PersonDeformationSurface>();
-            PersonDeformer.Configure(ARCamera, BodyRig, PoseTracker);
+            PersonDeformer.Configure(ARCamera, PersonTracking);
+
             var overlay = new GameObject("ARCore Mode Overlay").AddComponent<ARCoreModeOverlay>();
             overlay.Configure(this);
             var light = new GameObject("ARCore Light").AddComponent<Light>();
@@ -78,24 +91,37 @@ namespace EarthOL.ARCore
 #endif
         }
 
-        private void BuildBodyRig()
+        private void BuildPersonSystems()
         {
-            var rigObject = new GameObject("BodyProxyRig");
-            rigObject.SetActive(false);
-            BodyRig = rigObject.AddComponent<BodyProxyRig>();
-            rigObject.SetActive(true);
-            BodyRig.BuildDefaultRig();
-            PoseTracker = gameObject.AddComponent<BodyPoseTracker>();
-            PoseTracker.Configure(ARCamera, BodyRig);
+            PersonTracking = gameObject.AddComponent<PersonTrackingManager>();
+            PersonTracking.LostPersonSeconds = personLostSeconds;
+            CombatTarget.Provider = PersonTracking;
+
+            DetectionManager = gameObject.AddComponent<PoseDetectionManager>();
+            DetectionManager.Configure(ARCamera, PersonTracking);
+
+            bool lowMemoryMobile = Application.isMobilePlatform &&
+                (SystemInfo.processorType.IndexOf("mt6893", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 SystemInfo.graphicsDeviceName.IndexOf("Mali", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 SystemInfo.systemMemorySize <= 6000);
+            DetectionManager.DetectionFramesPerSecond = lowMemoryMobile ? Mathf.Min(personDetectionFps, 3.5f) : personDetectionFps;
+            DetectionManager.FlowFramesPerSecond = lowMemoryMobile ? Mathf.Min(personFlowFps, 10f) : personFlowFps;
+            DetectionManager.CaptureMaxSide = lowMemoryMobile ? 256 : 384;
+            DetectionManager.AdaptiveMobileBudget = true;
+            DetectionManager.AutoStart = startPersonDetection;
+
+            var profiler = gameObject.AddComponent<PersonDetectionProfiler>();
+            profiler.Configure(DetectionManager);
+
+            CartoonCanvas = gameObject.AddComponent<Cartoon2DCanvas>();
+            CartoonCanvas.Configure(ARCamera, PersonTracking);
         }
 
         private void BuildProjectileSpawner()
         {
             Spawner = new GameObject("Body Projectile Spawner").AddComponent<BodyProjectileSpawner>();
             Spawner.ARCamera = ARCamera;
-            Spawner.SelectedTarget = BodyRig.TargetRoot;
             Spawner.ConfigureCatalog(Resources.Load<BodyProjectileCatalog>("Throwables/Catalog"));
-            Spawner.PoseTracker = PoseTracker;
             Spawner.ThrowSpeed = 6f;
             Spawner.SpawnDistance = 0.2f;
             int layer = LayerMask.NameToLayer("Projectile");
@@ -105,11 +131,9 @@ namespace EarthOL.ARCore
         public void SetMode(GameMode mode)
         {
             bool deform = mode == GameMode.Deform;
-            if (BodyRig != null) BodyRig.gameObject.SetActive(true);
             if (Spawner != null) Spawner.enabled = !deform;
-            if (PoseTracker != null) PoseTracker.SetDeformationMode(deform);
-            // 手持挥扫也需要 warp 表面，故始终保持启用；按压是否触发由攻击路由按背包状态决定。
-            if (PersonDeformer != null) PersonDeformer.enabled = true;
+            // 形变/挥扫始终可用；按压是否触发由攻击路由按背包状态决定。
+            if (PersonDeformer != null) { PersonDeformer.enabled = true; PersonDeformer.PressEnabled = deform; }
         }
 
         private IEnumerator InitializeXR()

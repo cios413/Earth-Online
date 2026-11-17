@@ -10,20 +10,22 @@ namespace EarthOL.CombatInput
     [DisallowMultipleComponent]
     public sealed class HumanMaskOverlay : MonoBehaviour
     {
-        [SerializeField] BodyPoseTracker tracker;
+        [SerializeField] PersonTrackingManager tracking;
         [SerializeField] Camera arCamera;
         [SerializeField] Color maskColor = new Color(0.25f, 0.9f, 0.55f, 0.30f);
 
-        public void Configure(BodyPoseTracker poseTracker, Camera camera)
+        public void Configure(PersonTrackingManager personTracking, Camera camera)
         {
-            tracker = poseTracker;
+            tracking = personTracking;
             arCamera = camera;
         }
 
         void OnGUI()
         {
-            if (tracker == null || !tracker.HasPose || arCamera == null) return;
-            var pose = tracker.Current;
+            if (tracking == null || arCamera == null) return;
+            var person = tracking.BestPerson();
+            if (person == null) return;
+            var pose = person.AsPoseView();
             float aspect = (float)arCamera.pixelWidth / Mathf.Max(1f, arCamera.pixelHeight);
 
             var previous = GUI.color;

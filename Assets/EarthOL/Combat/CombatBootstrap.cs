@@ -37,6 +37,7 @@ namespace EarthOL.Combat
         AttackDamageConfig attackDamageConfig;
         GameObject healthBarAnchor;
         AttackDefinition[] configuredAttacks;
+        int currentPersonId = -1;
 
         /// <summary>预留的物体视觉接口（同伴在此订阅并播放效果）。</summary>
         public DefeatController DefeatController => defeatController;
@@ -62,7 +63,7 @@ namespace EarthOL.Combat
                 yield return null;
             }
 
-            while (bootstrap.BodyRig == null || bootstrap.PoseTracker == null ||
+            while (bootstrap.PersonTracking == null ||
                    bootstrap.Spawner == null || bootstrap.PersonDeformer == null)
             {
                 yield return null;
@@ -144,8 +145,6 @@ namespace EarthOL.Combat
 
         void Wire()
         {
-            bootstrap.PoseTracker.PersonSelected += OnPersonSelected;
-
             settingsOverlay.ModeChanged += OnModeChanged;
 
             healthSystem.Initialized += OnHealthInitialized;
@@ -192,7 +191,7 @@ namespace EarthOL.Combat
             if (enabled)
             {
                 // 已选中物体时开启：立即为当前选中物体初始化血量（不重置本轮历史）。
-                if (bootstrap != null && bootstrap.PoseTracker != null && bootstrap.PoseTracker.HasPose)
+                if (bootstrap != null && bootstrap.PersonTracking != null && bootstrap.PersonTracking.BestPerson() != null)
                     StartHealthRound();
             }
             else
@@ -219,16 +218,24 @@ namespace EarthOL.Combat
             if (bootstrap != null && bootstrap.Spawner != null)
                 bootstrap.Spawner.ClearProjectiles();
 
-            if (bootstrap != null && bootstrap.PoseTracker != null)
-                bootstrap.PoseTracker.RequestReselect();
         }
 
         void LateUpdate()
         {
-            if (healthBarAnchor == null || bootstrap == null || bootstrap.BodyRig == null) return;
+            var person = bootstrap != null && bootstrap.PersonTracking != null ? bootstrap.PersonTracking.BestPerson() : null;
+            int id = person != null ? person.personId : -1;
+            if (id != currentPersonId)
+            {
+                currentPersonId = id;
+                if (id >= 0) OnPersonSelected();
+            }
 
-            if (TryGetAnchorPosition(bootstrap.BodyRig, out var position))
-                healthBarAnchor.transform.position = position;
+            if (healthBarAnchor == null || bootstrap == null || bootstrap.ARCamera == null) return;
+
+            var target = CombatTarget.Provider != null ? CombatTarget.Provider.GetCurrentTarget() : null;
+            if (target != null)
+                healthBarAnchor.transform.position = bootstrap.ARCamera.ViewportToWorldPoint(
+                    new Vector3(target.screenRect.center.x, target.screenRect.yMax, 0.8f)) + Vector3.up * healthBarAnchorHeight;
         }
 
         bool TryGetAnchorPosition(BodyProxyRig rig, out Vector3 position)
@@ -260,8 +267,6 @@ namespace EarthOL.Combat
 
         void OnDestroy()
         {
-            if (bootstrap != null && bootstrap.PoseTracker != null)
-                bootstrap.PoseTracker.PersonSelected -= OnPersonSelected;
         }
     }
 }

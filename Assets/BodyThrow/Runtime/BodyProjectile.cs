@@ -63,7 +63,24 @@ namespace EarthOL.BodyThrow
         {
             if (State != FlightState.Flying) return;
             m_Age += Time.deltaTime;
-            if (m_Age >= maxLifetime) Finish();
+            if (m_Age >= maxLifetime) { Finish(); return; }
+            if (TryHit2D()) Finish();
+        }
+
+        bool TryHit2D()
+        {
+            var target = CombatTarget.Provider != null ? CombatTarget.Provider.GetCurrentTarget() : null;
+            if (target == null) return false;
+            var cam = Camera.main;
+            if (cam == null) return false;
+            Vector3 screen = cam.WorldToScreenPoint(transform.position);
+            Vector3 viewport = cam.ScreenToViewportPoint(screen);
+            if (target.screenRect.Contains(new Vector2(viewport.x, viewport.y)))
+            {
+                EarthOL.Combat.AttackDispatcher.Report(AttackId);
+                return true;
+            }
+            return false;
         }
 
         private void OnCollisionEnter(Collision collision)
