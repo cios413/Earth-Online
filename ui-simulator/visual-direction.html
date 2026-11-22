@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>EARTH OL · AR 界面视觉方向 v2</title>
+<style>
+/* ============================================================
+   EARTH OL — AR 悬浮界面视觉方向板 v2
+   参考：ui-simulator/index.html (v1 四屏模拟器)
+   主张：荧光是喷上去的墨，不是刷上去的墙
+   本页是「提案纸」：浅色纸面 + 深色界面样张，便于直接截图进分镜
+   ============================================================ */
+
+:root{
+  /* 游戏 UI 色板 */
+  --ink:      #100E1C;   /* 墨黑：描边、硬阴影、实景压暗 */
+  --board:    #211C38;   /* 酱紫板：面板底 */
+  --chalk:    #F4F1E8;   /* 骨白：主文字、高光 */
+  --green:    #A8FF45;   /* 喷绿：锁定、成功、数值 */
+  --pink:     #FF4FB0;   /* 桃红：命中、连击 */
+  --orange:   #FF9E33;   /* 汽水橙：类别墨盖、榜首 */
+  --ash:      #A9A2C7;   /* 弱化文字 */
+  /* 提案纸色板 */
+  --paper:    #F4F1E8;
+  --paper-2:  #EAE6D9;
+  --rule:     #D3CDBB;
+  --paper-ink:#191627;
+  --paper-mut:#6A6577;
+  /* 实景层（去饱和、中低明度，不属于 UI 色板） */
+  --real-a:   #6B667C;
+  --real-b:   #49455B;
+  --real-c:   #353246;
+
+  --display: "Arial Black","Arial Bold","Impact","Haettenschweiler",
+             "PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --text: "PingFang SC","Microsoft YaHei","Segoe UI","Noto Sans CJK SC",sans-serif;
+}
+
+*{ margin:0; padding:0; box-sizing:border-box; }
+html{ scroll-behavior:smooth; }
+body{
+  font-family:var(--text);
+  color:var(--paper-ink);
+  background:
+    radial-gradient(circle at 1px 1px, rgba(25,22,39,.055) 1px, transparent 1.2px) 0 0/10px 10px,
+    var(--paper);
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+button{ font:inherit; color:inherit; cursor:pointer; }
+:focus-visible{ outline:3px solid var(--pink); outline-offset:3px; }
+
+/* ---------- 提案纸通用 ---------- */
+.board{ max-width:1400px; margin:0 auto; padding:38px 34px 90px; }
+.kicker{
+  font-family:var(--display); font-size:11px; font-weight:900; letter-spacing:.08em;
+  color:var(--paper-mut); text-transform:none;
+}
+.rule{ height:2px; background:var(--rule); border:0; }
+.rule.ink{ height:3px; background:var(--ink); }
+
+.board-head{
+  display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between;
+  gap:20px; padding-bottom:20px; border-bottom:3px solid var(--ink);
+}
+.board-head h1{
+  font-family:var(--display); font-weight:900; font-size:clamp(30px,4.6vw,58px);
+  line-height:.95; letter-spacing:-.03em; margin:10px 0 12px;
+}
+.board-head h1 em{ font-style:normal; color:var(--pink); }
+.claim{
+  font-family:var(--display); font-weight:900; font-size:clamp(15px,1.7vw,21px);
+  line-height:1.35; max-width:38ch;
+}
+.claim small{
+  display:block; font-family:var(--text); font-weight:500; font-size:13px;
+  line-height:1.65; color:var(--paper-mut); margin-top:8px; max-width:52ch;
+}
+.head-meta{ text-align:right; font-size:12px; color:var(--paper-mut); line-height:1.8; }
+.head-meta b{ color:var(--paper-ink); font-weight:700; }
+
+/* ---------- 上方：计划 + 主分镜 ---------- */
+.top-grid{
+  display:grid; grid-template-columns:300px minmax(0,1fr);
+  gap:34px; margin-top:30px; align-items:start;
+}
+.plan{ display:flex; flex-direction:column; gap:22px; }
+.plan h2, .section h2{
+  font-family:var(--display); font-weight:900; font-size:17px; letter-spacing:-.01em;
+  margin-bottom:12px; display:flex; align-items:center; gap:9px;
+}
+.plan h2::before, .section h2::before{
+  content:""; width:12px; height:12px; background:var(--ink); flex:none;
+  box-shadow:4px 0 0 var(--green);
+}
+.plan h3{
+  font-size:11px; font-weight:800; letter-spacing:.04em; color:var(--paper-mut);
+  margin:0 0 8px;
+}
+.plan p{ font-size:12.5px; line-height:1.75; color:#3F3B4C; }
+.plan .card{
+  background:var(--paper-2); border:1px solid var(--rule);
+  padding:14px 15px;
+}
+
+/* 色板 */
+.swatches{ display:flex; flex-direction:column; gap:7px; }
+.sw-row{ display:flex; align-items:center; gap:9px; font-size:11.5px; }
+.sw-chip{
+  width:34px; height:22px; flex:none; border:2px solid var(--ink);
+  box-shadow:2px 2px 0 rgba(16,14,28,.2);
+}
+.sw-name{ font-weight:700; min-width:64px; }
+.sw-hex{ color:var(--paper-mut); font-size:10.5px; font-variant-numeric:tabular-nums; }
+.sw-pct{ margin-left:auto; font-weight:800; font-variant-numeric:tabular-nums; }
+.sw-note{ font-size:11px; color:var(--paper-mut); margin-top:9px; line-height:1.6; }
+
+/* 字阶 */
+.type-row{ display:flex; align-items:baseline; gap:10px; padding:5px 0; border-bottom:1px dashed var(--rule); }
+.type-row:last-child{ border-bottom:0; }
+.type-sample{ font-family:var(--display); font-weight:900; letter-spacing:-.02em; white-space:nowrap; }
+.type-row .lab{ margin-left:auto; font-size:10.5px; color:var(--paper-mut); white-space:nowrap; }
+.t-display{ font-size:27px; }
+.t-title{ font-size:19px; }
+.t-body{ font-size:14px; }
+.t-data{ font-size:17px; font-variant-numeric:tabular-nums; color:var(--green); -webkit-text-stroke:.6px var(--ink); }
+.t-micro{ font-size:11px; font-family:var(--text); font-weight:700; color:#6A6577; }
+
+/* 图层规则 */
+.layer-list{ display:flex; flex-direction:column; gap:8px; }
+.layer-item{ display:flex; gap:10px; align-items:flex-start; font-size:11.5px; line-height:1.55; }
+.layer-dot{ width:16px; height:16px; flex:none; margin-top:2px; border:2px solid var(--ink); }
+.layer-dot.r{ background:linear-gradient(135deg,var(--real-a),var(--real-c)); }
+.layer-dot.a{ background:rgba(168,255,69,.5); }
+.layer-dot.h{ background:var(--board); box-shadow:inset 0 0 0 3px var(--chalk); }
+.layer-item b{ display:block; font-size:12px; }
+.layer-item span{ color:var(--paper-mut); }
+
+.principles{ list-style:none; display:flex; flex-direction:column; gap:7px; }
+.principles li{ font-size:12px; line-height:1.6; padding-left:16px; position:relative; color:#3F3B4C; }
+.principles li::before{
+  content:""; position:absolute; left:0; top:7px; width:7px; height:7px; background:var(--pink);
+}
+.selfcheck{ font-size:11.5px; line-height:1.7; color:#4B4658; }
+.selfcheck b{ color:var(--paper-ink); }
+
+/* ---------- 分镜格 ---------- */
+.stage{ min-width:0; }
+.stage-top{ display:grid; grid-template-columns:340px minmax(0,1fr); gap:26px; align-items:start; }
+.shot-caption{ font-size:11.5px; color:var(--paper-mut); margin-top:10px; line-height:1.6; }
+.shot-caption b{ color:var(--paper-ink); }
+
+.layer-panel{
+  background:var(--paper-2); border:1px solid var(--rule); padding:18px 20px;
+}
+.layer-panel h3{ font-family:var(--display); font-size:15px; font-weight:900; margin-bottom:6px; }
+.layer-panel > p{ font-size:12px; color:#4B4658; line-height:1.7; margin-bottom:14px; }
+.view-switch{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+.view-switch.tight{ margin-top:-8px; margin-bottom:12px; }
+.view-btn{
+  border:2px solid var(--ink); background:var(--paper); padding:7px 13px;
+  font-family:var(--display); font-size:12px; font-weight:900;
+  box-shadow:3px 3px 0 var(--ink); transition:transform .12s, box-shadow .12s;
+}
+.view-btn:hover{ transform:translate(-1px,-1px); box-shadow:4px 4px 0 var(--ink); }
+.view-btn[aria-pressed="true"]{ background:var(--ink); color:var(--chalk); }
+.layer-rows{ display:flex; flex-direction:column; gap:0; border-top:1px solid var(--rule); }
+.layer-row{
+  display:grid; grid-template-columns:74px 1fr; gap:12px; padding:10px 0;
+  border-bottom:1px solid var(--rule); font-size:11.5px; line-height:1.6;
+}
+.layer-row b{ font-weight:800; }
+.layer-row span{ color:var(--paper-mut); }
+.layer-row em{ font-style:normal; font-weight:800; color:var(--paper-ink); }
+
+.stage-row{
+  display:grid; grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:18px; margin-top:26px;
+}
+.section{ margin-top:52px; }
+.section > p.lede{ font-size:13px; color:#4B4658; max-width:78ch; line-height:1.8; margin-bottom:20px; }
+
+/* ---------- 手机画幅（统一 9:16 分镜格） ---------- */
+.phone{
+  width:320px; height:590px; position:relative; overflow:hidden;
+  background:var(--ink); border:6px solid var(--ink);
+  box-shadow:0 10px 0 rgba(16,14,28,.16), 0 22px 40px rgba(16,14,28,.14);
+  flex:none;
+}
+.phone-wrap{ width:320px; }
+.mini{ --mini-s:.66; }
+.mini .phone-wrap{ width:320px; transform:scale(var(--mini-s)); transform-origin:top left; }
+.mini .shot-frame{ width:calc(320px * var(--mini-s)); height:calc(590px * var(--mini-s)); }
+.shot-frame{ width:320px; overflow:hidden; }
+.notch{
+  position:absolute; top:0; left:50%; transform:translateX(-50%);
+  width:88px; height:14px; background:var(--ink); z-index:20;
+  border-radius:0 0 9px 9px;
+}
+.mini .phone{ border-width:6px; }
+
+/* 深色半调网点暗纹 */
+.halftone{
+  position:absolute; inset:0; z-index:0;
+  background-color:var(--ink);
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(244,241,232,.085) 1px, transparent 1.3px),
+    radial-gradient(circle at 1px 1px, rgba(168,255,69,.045) 1.1px, transparent 1.35px);
+  background-size:9px 9px, 18px 18px;
+  background-position:0 0, 4px 4px;
+}
+
+/* 像素阶梯圆角：所有边缘同源 */
+.px{
+  --s:9px;
+  clip-path: polygon(
+    var(--s) 0, calc(100% - var(--s)) 0,
+    calc(100% - var(--s)) calc(var(--s) * .34),
+    calc(100% - var(--s) * .67) calc(var(--s) * .34),
+    calc(100% - var(--s) * .67) calc(var(--s) * .67),
+    calc(100% - var(--s) * .34) calc(var(--s) * .67),
+    calc(100% - var(--s) * .34) var(--s),
+    100% var(--s),
+    100% calc(100% - var(--s)),
+    calc(100% - var(--s) * .34) calc(100% - var(--s)),
+    calc(100% - var(--s) * .34) calc(100% - var(--s) * .34),
+    calc(100% - var(--s) * .67) calc(100% - var(--s) * .34),
+    calc(100% - var(--s) * .67) calc(100% - var(--s) * .67),
+    calc(100% - var(--s)) calc(100% - var(--s) * .67),
+    calc(100% - var(--s)) calc(100% - var(--s) * .34),
+    calc(100% - var(--s)) 100%,
+    var(--s) 100%,
+    var(--s) calc(100% - var(--s) * .34),
+    calc(var(--s) * .67) calc(100% - var(--s) * .34),
+    calc(var(--s) * .67) calc(100% - var(--s) * .67),
+    calc(var(--s) * .34) calc(100% - var(--s) * .67),
+    calc(var(--s) * .34) calc(100% - var(--s)),
+    0 calc(100% - var(--s)),
+    0 var(--s),
+    calc(var(--s) * .34) var(--s),
+    calc(var(--s) * .34) calc(var(--s) * .67),
+    calc(var(--s) * .67) calc(var(--s) * .67),
+    calc(var(--s) * .67) calc(var(--s) * .34),
+    var(--s) calc(var(--s) * .34)
+  );
+}
+
+/* ---------- AR 主分镜：三层 ---------- */
+.ui{
+  position:absolute; inset:0; z-index:1; font-family:var(--display); color:var(--chalk);
+  background-color:var(--ink);
+  background-image:radial-gradient(circle at 1px 1px, rgba(244,241,232,.085) 1px, transparent 1.3px);
+  background-size:9px 9px;
+}
+.ar-reality{
+  position:absolute; inset:0; z-index:1; overflow:hidden;
+  background:linear-gradient(180deg,var(--real-a) 0%,var(--real-b) 52%,var(--real-c) 100%);
+  filter:saturate(.4) brightness(.74) blur(.5px);
+  transition:opacity .25s ease;
+}
+/* 实景：校园走廊的极简插画，只给分镜认场景，不抢 UI */
+.real-wall{ position:absolute; inset:0 0 38% 0; background:linear-gradient(180deg,rgba(255,255,255,.09),transparent); }
+.real-window{
+  position:absolute; top:52px; left:26px; width:88px; height:118px;
+  background:rgba(244,241,232,.13); border:6px solid rgba(16,14,28,.2);
+}
+.real-window::after{ content:""; position:absolute; left:50%; top:0; width:6px; height:100%; background:rgba(16,14,28,.2); }
+.real-floor{ position:absolute; inset:62% 0 0 0; background:rgba(16,14,28,.22); }
+.real-floor::before{
+  content:""; position:absolute; inset:0;
+  background:repeating-linear-gradient(90deg, transparent 0 62px, rgba(255,255,255,.05) 62px 64px);
+}
+.real-desk{
+  position:absolute; left:24px; bottom:96px; width:112px; height:14px;
+  background:rgba(16,14,28,.3);
+}
+.real-desk::before,.real-desk::after{
+  content:""; position:absolute; top:14px; width:9px; height:60px; background:rgba(16,14,28,.3);
+}
+.real-desk::before{ left:8px; } .real-desk::after{ right:8px; }
+.real-person{ position:absolute; left:50%; top:30%; transform:translateX(-50%); width:104px; height:236px; }
+.real-person .ph{
+  width:62px; height:62px; margin:0 auto; border-radius:50% 50% 46% 46%;
+  background:rgba(16,14,28,.34);
+}
+.real-person .pb{
+  width:96px; height:176px; margin:8px auto 0; border-radius:34px 34px 12px 12px;
+  background:rgba(16,14,28,.34);
+}
+.real-person .shadow{
+  position:absolute; left:50%; bottom:-12px; transform:translateX(-50%);
+  width:130px; height:18px; border-radius:50%; background:rgba(16,14,28,.3);
+}
+.vignette{
+  position:absolute; inset:0; z-index:2; pointer-events:none;
+  background:radial-gradient(ellipse at 50% 45%, transparent 38%, rgba(16,14,28,.42) 100%);
+}
+
+/* 锚定层 */
+.ar-anchor{ position:absolute; inset:0; z-index:3; transition:opacity .25s ease; }
+.anchor-box{
+  position:absolute; left:50%; top:26%; transform:translateX(-50%) rotate(-1deg);
+  width:190px; height:232px;
+  border:3px solid rgba(168,255,69,.78);
+  opacity:.72;
+  --s:14px;
+}
+.anchor-tag{
+  position:absolute; top:9px; left:9px; transform:rotate(-2deg);
+  background:var(--green); color:var(--ink); border:2px solid var(--ink);
+  font-size:10px; font-weight:900; padding:3px 9px; white-space:nowrap;
+}
+/* 识别中：淡荧光候选框；点选后升级为实线墨框 */
+.anchor-box{ cursor:pointer; }
+.lock-scan .anchor-box{ border-color:rgba(168,255,69,.34); opacity:.55; }
+.lock-scan .anchor-tag{ background:var(--orange); }
+.lock-scan .ink-splat{ opacity:0; }
+.anchor-box.wobble{ animation:wobble .38s steps(3,end); }
+@keyframes wobble{
+  0%  { transform:translateX(-50%) rotate(-1deg) scale(1); }
+  40% { transform:translateX(-50%) rotate(-1deg) scale(1.06,.92); }
+  100%{ transform:translateX(-50%) rotate(-1deg) scale(1); }
+}
+.ink-splat{ position:absolute; z-index:4; pointer-events:none; }
+.ink-splat rect{ shape-rendering:crispEdges; }
+
+/* HUD 层：100% 不透明，硬描边 */
+.hud{ position:absolute; inset:0; z-index:5; transition:opacity .25s ease; pointer-events:none; }
+.hud > *{ position:absolute; pointer-events:auto; }
+
+/* 长条贴纸：唯一信息容器 */
+.strip{
+  left:12px; right:12px; display:flex; align-items:stretch;
+  background:var(--board); border:3px solid var(--ink);
+  filter:drop-shadow(0 5px 0 rgba(16,14,28,.75));
+  --s:9px;
+}
+.strip .cap{
+  flex:none; min-width:52px; display:grid; place-items:center;
+  padding:0 8px; font-size:10.5px; font-weight:900; color:var(--ink);
+  border-right:3px solid var(--ink); text-align:center; line-height:1.15;
+}
+.cap.g{ background:var(--green); } .cap.p{ background:var(--pink); } .cap.o{ background:var(--orange); }
+.strip .body{ flex:1; min-width:0; padding:7px 10px; }
+.strip .row{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+.strip .k{ font-size:10.5px; font-weight:700; color:var(--ash); }
+.strip .v{ font-size:17px; font-weight:900; font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
+.strip .v.g{ color:var(--green); } .strip .v.o{ color:var(--orange); } .strip .v.p{ color:var(--pink); }
+
+.strip-top{ top:26px; }
+.strip-hp{ top:82px; }
+.hpbar{ height:9px; background:rgba(16,14,28,.85); border:2px solid var(--ink); margin-top:6px; overflow:hidden; }
+.hpbar i{ display:block; height:100%; width:72%; background:var(--pink); }
+.hpbar.self i{ background:var(--green); width:88%; }
+
+/* 投掷物长条 */
+.strip-tray{ bottom:96px; display:block; }
+.tray-title{
+  display:flex; justify-content:space-between; align-items:baseline;
+  font-size:10.5px; color:var(--ash); font-weight:700; margin-bottom:7px;
+}
+.tray-title b{ color:var(--chalk); font-size:11px; font-weight:900; }
+.tray-row{ display:flex; gap:6px; }
+.tray-card{
+  flex:1; min-width:0; text-align:center; padding:6px 2px 5px;
+  background:rgba(16,14,28,.65); border:2px solid var(--ink);
+  color:var(--chalk); font-family:var(--display); --s:6px;
+  transition:transform .12s ease, background .12s ease;
+}
+.tray-card .ic{ display:block; font-size:20px; font-weight:900; line-height:1.1; }
+.tray-card .nm{ display:block; font-size:9px; color:var(--ash); font-weight:700; }
+.tray-card:hover{ transform:translateY(-2px); }
+.tray-card[aria-pressed="true"]{
+  background:rgba(168,255,69,.16); border-color:var(--green);
+}
+.tray-card[aria-pressed="true"] .ic{ color:var(--green); }
+.tray-card[aria-pressed="true"] .nm{ color:var(--green); }
+
+/* 果冻大按钮：阶梯化圆角 + 渐变高光 + 硬阴影 */
+.jelly{
+  left:12px; right:12px; bottom:22px; height:58px;
+  display:flex; align-items:center; justify-content:center; gap:10px;
+  border:0; color:var(--ink); font-family:var(--display); font-weight:900; font-size:19px;
+  letter-spacing:.01em; --s:18px;
+  background:linear-gradient(180deg, #C9FF8A 0%, var(--green) 44%, #74C423 100%);
+  filter:drop-shadow(0 6px 0 var(--ink));
+  transition:transform .1s ease, filter .1s ease;
+}
+.jelly::before{
+  content:""; position:absolute; left:22px; right:22px; top:7px; height:6px;
+  background:rgba(255,255,255,.32); border-radius:50%;
+}
+.jelly:hover{ transform:translateY(-2px); filter:drop-shadow(0 8px 0 var(--ink)); }
+.jelly:active{ transform:translateY(5px); filter:drop-shadow(0 1px 0 var(--ink)); }
+.jelly .arrow{ font-size:16px; }
+.jelly.pink{ background:linear-gradient(180deg,#FFA6D9 0%,var(--pink) 44%,#C3217C 100%); color:var(--chalk); }
+.jelly.dark{ background:linear-gradient(180deg,#3B3360 0%,var(--board) 60%,#151129 100%); color:var(--chalk); }
+
+/* 三视图状态 */
+.view-reality .hud{ opacity:0; pointer-events:none; }
+.view-reality .ar-anchor{ opacity:.22; }
+.view-virtual .ar-reality{ opacity:0; }
+.view-virtual .vignette{ opacity:0; }
+.view-virtual .ar-anchor{ opacity:.9; }
+.view-composite .ar-anchor{ opacity:1; }
+
+/* 命中墨点（只响应用户动作） */
+.hit-splat{
+  position:absolute; z-index:6; left:50%; top:40%; width:120px; height:120px;
+  transform:translate(-50%,-50%); pointer-events:none; opacity:0;
+}
+.hit-splat.go{ animation:splat .48s steps(4,end) forwards; }
+@keyframes splat{
+  0%{ opacity:0; transform:translate(-50%,-50%) scale(.5); }
+  35%{ opacity:1; transform:translate(-50%,-50%) scale(1.08); }
+  100%{ opacity:0; transform:translate(-50%,-50%) scale(1.3); }
+}
+
+/* ---------- 三个小分镜 ---------- */
+.screen{ position:absolute; inset:0; z-index:1; font-family:var(--display); color:var(--chalk); }
+.screen-inner{ position:absolute; inset:0; z-index:2; display:flex; flex-direction:column; padding:30px 16px 18px; }
+
+/* 首页：破门 */
+.home-title{ text-align:left; margin-top:6px; }
+.home-title .big{
+  font-size:41px; line-height:.88; font-weight:900; letter-spacing:-.035em;
+  -webkit-text-stroke:2px var(--ink);
+  text-shadow:4px 4px 0 var(--ink), 0 0 0 2px var(--ink);
+  transform:skew(-4deg);
+}
+.home-title .big em{ font-style:normal; color:var(--pink); }
+.home-title .sub{ font-family:var(--text); font-size:11px; font-weight:600; color:var(--ash); margin-top:9px; }
+.skull-stage{ flex:1; display:grid; place-items:center; position:relative; }
+.px-skull{ width:190px; height:220px; image-rendering:pixelated; filter:drop-shadow(7px 7px 0 var(--ink)); }
+.skull-hp{ position:absolute; left:0; right:0; top:0; }
+.skull-hint{
+  position:absolute; bottom:6px; left:50%; transform:translateX(-50%) rotate(-2deg);
+  background:var(--orange); color:var(--ink); border:2px solid var(--ink);
+  font-size:11px; font-weight:900; padding:4px 12px; white-space:nowrap;
+}
+.home-foot{ font-size:12px; font-weight:900; color:var(--chalk); text-align:left; }
+.home-foot small{ display:block; font-family:var(--text); font-size:10.5px; font-weight:600; color:var(--ash); margin-top:4px; }
+
+/* 模式：长条色块面板 */
+.mode-title{ font-size:27px; font-weight:900; line-height:1; letter-spacing:-.02em; margin-bottom:14px; }
+.mode-title small{ display:block; font-family:var(--text); font-size:11px; font-weight:600; color:var(--ash); margin-top:7px; }
+.mode-cards{ display:flex; flex-direction:column; gap:11px; }
+.mode-card{
+  background:var(--board); border:3px solid var(--ink);
+  filter:drop-shadow(0 5px 0 rgba(16,14,28,.7));
+  display:flex; align-items:stretch; min-height:106px; --s:11px;
+}
+.mode-card .cap{ flex:none; width:54px; display:grid; place-items:center; border-right:3px solid var(--ink); }
+.mode-card .cap span{ font-size:27px; font-weight:900; }
+.mode-card.rage .cap{ background:var(--pink); color:var(--ink); }
+.mode-card.chill .cap{ background:var(--green); color:var(--ink); }
+.mode-card .info{ flex:1; padding:10px 12px; }
+.mode-card .info b{ display:block; font-size:17px; font-weight:900; }
+.mode-card .info p{ font-family:var(--text); font-size:10.5px; color:var(--ash); line-height:1.5; margin-top:4px; }
+.mode-card .info .tag{
+  display:inline-block; margin-top:8px; font-size:9.5px; font-weight:900;
+  color:var(--ink); background:var(--chalk); padding:2px 7px;
+}
+.mode-card[aria-pressed="true"]{ outline:3px solid var(--green); outline-offset:3px; }
+.mode-foot{ margin-top:auto; }
+
+/* 结算：长条榜单 */
+.result-title{
+  font-size:34px; font-weight:900; line-height:1; letter-spacing:-.03em;
+  color:var(--chalk);
+  text-shadow:4px 4px 0 var(--ink), 7px 7px 0 var(--pink);
+  margin-bottom:2px;
+}
+.result-title small{
+  display:block; font-family:var(--text); font-size:10.5px; font-weight:600;
+  color:var(--ash); text-shadow:none; margin-top:26px; line-height:1.65;
+}
+.rank-strip{
+  display:flex; align-items:center; gap:9px; background:var(--board);
+  border:2px solid var(--ink); padding:7px 9px; margin-bottom:7px; --s:7px;
+}
+.rank-strip .rk{
+  flex:none; width:24px; height:24px; display:grid; place-items:center;
+  background:var(--chalk); color:var(--ink); font-size:12px; font-weight:900;
+}
+.rank-strip .rk.g{ background:var(--green); }
+.rank-strip .rk.o{ background:var(--orange); }
+.rank-strip .rk.p{ background:var(--pink); }
+.rank-strip.me{ background:rgba(255,79,176,.18); outline:2px solid var(--pink); outline-offset:-2px; }
+.rank-strip .nm{ flex:1; font-size:12px; font-weight:900; }
+.rank-strip .sc{ font-size:14px; font-weight:900; color:var(--green); font-variant-numeric:tabular-nums; }
+.rank-wrap{ margin-top:16px; }
+.rank-label{ font-size:10.5px; font-weight:900; color:var(--ash); margin-bottom:9px; }
+.result-actions{ margin-top:auto; display:flex; flex-direction:column; gap:9px; }
+.result-actions .jelly{ position:static; height:44px; font-size:14px; --s:12px; }
+.result-actions .jelly.dark{ height:38px; font-size:12px; }
+
+/* ---------- 组件规范 ---------- */
+.component-grid{
+  display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px;
+}
+.comp{
+  background:var(--paper-2); border:1px solid var(--rule); padding:16px;
+  min-height:186px; display:flex; flex-direction:column;
+}
+.comp h3{ font-family:var(--display); font-size:13px; font-weight:900; margin-bottom:4px; }
+.comp > p{ font-size:11px; color:var(--paper-mut); line-height:1.6; margin-bottom:14px; }
+.comp-stage{
+  margin-top:auto; background:var(--ink); border:1px solid var(--rule);
+  padding:16px 14px; display:flex; align-items:center; justify-content:center;
+  gap:10px; flex-wrap:wrap; min-height:82px;
+}
+.btn-demo{
+  position:relative; display:inline-grid; place-items:center; padding:11px 16px;
+  font-family:var(--display); font-size:12px; font-weight:900; color:var(--ink);
+  --s:12px; border:0;
+  background:linear-gradient(180deg,#C9FF8A 0%,var(--green) 48%,#74C423 100%);
+  filter:drop-shadow(0 5px 0 var(--ink));
+}
+.btn-demo::before{
+  content:""; position:absolute; left:12px; right:12px; top:5px; height:4px;
+  background:rgba(255,255,255,.35); border-radius:50%;
+}
+.btn-demo:active{ transform:translateY(4px); filter:drop-shadow(0 1px 0 var(--ink)); }
+.btn-demo.pink{ background:linear-gradient(180deg,#FFA6D9 0%,var(--pink) 48%,#C3217C 100%); color:var(--chalk); }
+.btn-demo.press{ transform:translateY(4px); filter:drop-shadow(0 1px 0 var(--ink)); }
+.btn-demo.off{
+  background:#2A2540; color:#6A6480; filter:none; box-shadow:inset 0 0 0 2px #3A3456;
+}
+.btn-demo.off::before{ display:none; }
+.strip-demo{
+  display:flex; width:100%; background:var(--board); border:2px solid var(--ink); --s:7px;
+}
+.strip-demo .cap{ flex:none; width:34px; display:grid; place-items:center; background:var(--orange); color:var(--ink); font-family:var(--display); font-size:10px; font-weight:900; border-right:2px solid var(--ink); }
+.strip-demo .body{ flex:1; padding:6px 8px; display:flex; justify-content:space-between; align-items:center; font-family:var(--display); font-size:11px; font-weight:900; color:var(--chalk); }
+.strip-demo .body b{ color:var(--green); font-variant-numeric:tabular-nums; }
+.edge-demo{ display:flex; gap:14px; align-items:center; }
+.edge-box{ width:62px; height:46px; background:var(--green); --s:12px; }
+.edge-box.small{ --s:6px; background:var(--pink); }
+.edge-box.plain{ border-radius:14px; }
+.splat-demo{ display:flex; gap:18px; align-items:center; }
+.dot-demo{ display:grid; grid-template-columns:repeat(4,6px); gap:5px; }
+.dot-demo i{ width:6px; height:6px; background:var(--pink); display:block; }
+.half-demo{
+  width:100%; height:64px; background-color:var(--ink);
+  background-image:radial-gradient(circle at 1px 1px, rgba(244,241,232,.3) 1.2px, transparent 1.5px);
+  background-size:8px 8px;
+}
+.anchor-demo{
+  width:76px; height:64px; border:3px solid rgba(168,255,69,.8); --s:10px;
+  position:relative;
+}
+.anchor-demo::after{
+  content:"2.4m"; position:absolute; left:-6px; top:-13px; background:var(--green);
+  color:var(--ink); font-family:var(--display); font-size:9px; font-weight:900; padding:1px 5px;
+}
+.type-demo{ display:flex; flex-direction:column; gap:4px; align-items:flex-start; }
+.type-demo .a{
+  font-family:var(--display); font-size:22px; font-weight:900; color:var(--chalk);
+  -webkit-text-stroke:1px var(--ink); text-shadow:3px 3px 0 var(--ink);
+}
+.type-demo .b{ font-family:var(--display); font-size:12px; font-weight:900; color:var(--chalk); }
+.type-demo .c{ font-family:var(--text); font-size:10px; color:var(--ash); }
+
+/* ---------- 前后对照 ---------- */
+.compare{ display:grid; grid-template-columns:1fr 1fr; gap:0; border:2px solid var(--ink); }
+.compare > div{ padding:18px 20px; }
+.compare .before{ background:var(--paper-2); border-right:2px solid var(--ink); }
+.compare .after{ background:var(--paper); }
+.compare h3{ font-family:var(--display); font-size:14px; font-weight:900; margin-bottom:12px; }
+.compare .before h3{ color:var(--paper-mut); }
+.compare ul{ list-style:none; display:flex; flex-direction:column; gap:10px; }
+.compare li{ font-size:12px; line-height:1.65; padding-left:16px; position:relative; }
+.compare .before li::before{ content:"−"; position:absolute; left:0; font-weight:900; color:#A09888; }
+.compare .after li::before{ content:"+"; position:absolute; left:0; font-weight:900; color:#3E8C15; }
+.compare li b{ font-weight:800; }
+
+/* ---------- 待确认 ---------- */
+.questions{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.q{ background:var(--paper-2); border:1px solid var(--rule); border-left:5px solid var(--pink); padding:14px 16px; }
+.q:nth-child(2){ border-left-color:var(--green); }
+.q:nth-child(3){ border-left-color:var(--orange); }
+.q:nth-child(4){ border-left-color:var(--ink); }
+.q h3{ font-family:var(--display); font-size:13px; font-weight:900; margin-bottom:6px; }
+.q p{ font-size:11.5px; color:#4B4658; line-height:1.7; }
+.q .opts{ font-size:11px; color:var(--paper-mut); margin-top:8px; }
+
+.board-foot{
+  margin-top:52px; padding-top:18px; border-top:2px solid var(--ink);
+  display:flex; flex-wrap:wrap; gap:14px; justify-content:space-between;
+  font-size:11px; color:var(--paper-mut); line-height:1.7;
+}
+
+/* ---------- 响应式 ---------- */
+@media (max-width:1180px){
+  .top-grid{ grid-template-columns:270px minmax(0,1fr); gap:24px; }
+  .stage-top{ grid-template-columns:320px minmax(0,1fr); gap:18px; }
+  .mini{ --mini-s:.6; }
+}
+@media (max-width:960px){
+  .top-grid{ grid-template-columns:1fr; }
+  .plan{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
+  .stage-top{ grid-template-columns:320px minmax(0,1fr); }
+  .component-grid{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media (max-width:720px){
+  .board{ padding:24px 16px 60px; }
+  .stage-top{ grid-template-columns:1fr; }
+  .stage-row{ grid-template-columns:1fr; gap:8px; }
+  .mini{ --mini-s:.82; }
+  .plan{ grid-template-columns:1fr; }
+  .component-grid{ grid-template-columns:1fr; }
+  .compare{ grid-template-columns:1fr; }
+  .compare .before{ border-right:0; border-bottom:2px solid var(--ink); }
+  .questions{ grid-template-columns:1fr; }
+  .head-meta{ text-align:left; }
+  .phone-wrap{ max-width:100%; }
+}
+@media (max-width:380px){
+  .mini{ --mini-s:.7; }
+  .shot.main .phone-wrap{ transform:scale(.9); transform-origin:top left; margin-bottom:-59px; }
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{ animation-duration:.01ms !important; transition-duration:.01ms !important; }
+  html{ scroll-behavior:auto; }
+}
+</style>
+</head>
+<body>
+<div class="board">
+
+  <header class="board-head">
+    <div>
+      <div class="kicker">AR 界面视觉方向提案 · v2 · 基于 ui-simulator v1 再加工</div>
+      <h1>EARTH <em>OL</em> / 把现实当画布</h1>
+      <div class="claim">
+        荧光是喷上去的墨，不是刷上去的墙。
+        <small>深色半调是墙，荧光只出现在墨盖、描边和命中那一瞬；虚拟面板永远比实景更黑、更硬、更清楚。一局三分钟的校园解压派对，界面不能比被糊墨水的人还吵。</small>
+      </div>
+    </div>
+    <div class="head-meta">
+      <b>画幅</b> 9:16 竖屏 · 统一 320×590 分镜格<br />
+      <b>受众</b> 校园 · 课间单手 · 室内外混合光线<br />
+      <b>交付</b> 方向板 / 组件规范 / 分镜样张<br />
+      <b>移植</b> Unity UGUI + TextMeshPro
+    </div>
+  </header>
+
+  <div class="top-grid">
+
+    <!-- ============ 左：设计计划 ============ -->
+    <aside class="plan">
+      <div class="card">
+        <h3>颜色 · 荧光合计 ≤10%</h3>
+        <div class="swatches">
+          <div class="sw-row"><span class="sw-chip" style="background:#100E1C"></span><span class="sw-name">墨黑</span><span class="sw-hex">#100E1C</span><span class="sw-pct">55%</span></div>
+          <div class="sw-row"><span class="sw-chip" style="background:#211C38"></span><span class="sw-name">酱紫板</span><span class="sw-hex">#211C38</span><span class="sw-pct">25%</span></div>
+          <div class="sw-row"><span class="sw-chip" style="background:#F4F1E8"></span><span class="sw-name">骨白</span><span class="sw-hex">#F4F1E8</span><span class="sw-pct">12%</span></div>
+          <div class="sw-row"><span class="sw-chip" style="background:#A8FF45"></span><span class="sw-name">喷绿</span><span class="sw-hex">#A8FF45</span><span class="sw-pct">4%</span></div>
+          <div class="sw-row"><span class="sw-chip" style="background:#FF4FB0"></span><span class="sw-name">桃红</span><span class="sw-hex">#FF4FB0</span><span class="sw-pct">3%</span></div>
+          <div class="sw-row"><span class="sw-chip" style="background:#FF9E33"></span><span class="sw-name">汽水橙</span><span class="sw-hex">#FF9E33</span><span class="sw-pct">1%</span></div>
+        </div>
+        <p class="sw-note">高饱和依然给足，但只做小面积笔触：类别墨盖、数值、锁定框、命中墨点。骨白替代纯白，深色占八成，长时间盯屏不刺眼。</p>
+      </div>
+
+      <div class="card">
+        <h3>字阶 · 一个字族，两个权重角色</h3>
+        <div class="type-row"><span class="type-sample t-display">打破封印</span><span class="lab">40 / 0.9 · 900</span></div>
+        <div class="type-row"><span class="type-sample t-title">本机成绩</span><span class="lab">20 / 1.0 · 900</span></div>
+        <div class="type-row"><span class="type-sample t-body">再来一局</span><span class="lab">15 / 1.2 · 900</span></div>
+        <div class="type-row"><span class="type-sample t-data">9870</span><span class="lab">18 · 等宽数字</span></div>
+        <div class="type-row"><span class="type-sample t-micro">距目标 2.4 米</span><span class="lab">11 · 600</span></div>
+        <p class="sw-note">超粗无衬线（Arial Black / 苹方 / 雅黑）。标题 2px 墨描边 + 4px 硬阴影，不用柔光。中文主导，英文只留 HP 这类真术语，且降级为小字。</p>
+      </div>
+
+      <div class="card">
+        <h3>三层 · 实景 / 锚定 / 界面</h3>
+        <div class="layer-list">
+          <div class="layer-item"><span class="layer-dot r"></span><div><b>实景层</b><span>去饱和 32% · 亮度 56% · 微模糊，不放任何文字</span></div></div>
+          <div class="layer-item"><span class="layer-dot a"></span><div><b>锚定层</b><span>只锚人：识别后淡候选框，点选升级为 72% 实线墨框 + 距离标签</span></div></div>
+          <div class="layer-item"><span class="layer-dot h"></span><div><b>界面层</b><span>100% 不透明墨底 + 骨白字 + 3px 硬描边 + 5px 硬阴影</span></div></div>
+        </div>
+        <p class="sw-note">三层靠「饱和度 + 不透明度 + 硬描边」分离，而不是靠颜色区分。任何一层都不与实景混色。</p>
+      </div>
+
+      <div class="card">
+        <h3>原则</h3>
+        <ul class="principles">
+          <li>荧光做墨不做底，深色半调占八成以上。</li>
+          <li>所有边缘同源：圆角也是像素阶梯，果冻按钮照样立体。</li>
+          <li>长条贴纸是唯一信息容器，左端墨盖标类别，右侧深色承载内容。</li>
+          <li>左对齐，只有数值右对齐；标题倾斜仅限破门与结算。</li>
+          <li>只留一次入场墨迹；其余动效只回答用户的动作。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>第二遍自检 · 改了什么</h3>
+        <p class="selfcheck">
+          <b>避开默认：</b>「近黑底 + 单一荧光绿点缀」改成三色撞色且荧光只做笔触；同款圆角卡片套件改成长条贴纸 + 层级化阶梯角；满屏 ALL-CAPS 标签（PICK YOUR SIDEKICK / THROWABLE / TOP 3）全删。<br />
+          <b>解决冲突：</b>「像素画风」与「大圆角果冻按钮」用阶梯化圆角统一；「高饱和」与「不刺眼」用面积控制与骨白替代纯白解决。<br />
+          <b>可验证：</b>右侧三视图开关能直接拆开实景与界面，而不是只在文字里说分层。
+        </p>
+      </div>
+    </aside>
+
+    <!-- ============ 右：分镜 ============ -->
+    <section class="stage">
+      <h2>分镜样张 · 一局四格</h2>
+
+      <div class="stage-top">
+        <!-- 主分镜：AR 悬浮界面 -->
+        <div class="shot main">
+          <div class="phone-wrap"><div class="phone" id="arPhone">
+            <div class="notch"></div>
+            <div class="ui view-composite" id="arUI">
+
+              <!-- 实景层 -->
+              <div class="ar-reality">
+                <div class="real-wall"></div>
+                <div class="real-window"></div>
+                <div class="real-floor"></div>
+                <div class="real-desk"></div>
+                <div class="real-person"><div class="ph"></div><div class="pb"></div><div class="shadow"></div></div>
+              </div>
+              <div class="vignette"></div>
+
+              <!-- 锚定层 -->
+              <div class="ar-anchor">
+                <div class="anchor-box px" id="anchorBox" role="button" tabindex="0" aria-label="点选锁定识别到的人">
+                  <span class="anchor-tag" id="lockTag">已锁定 · 人 · 2.4 m</span>
+                </div>
+                <svg class="ink-splat" style="left:22px;top:186px" width="52" height="52" viewBox="0 0 13 13" aria-hidden="true">
+                  <g fill="#A8FF45" opacity=".55">
+                    <rect x="4" y="4" width="4" height="4"/><rect x="1" y="5" width="2" height="2"/>
+                    <rect x="9" y="2" width="2" height="2"/><rect x="6" y="9" width="2" height="2"/>
+                    <rect x="2" y="1" width="1" height="1"/><rect x="11" y="8" width="1" height="1"/>
+                  </g>
+                </svg>
+                <svg class="ink-splat" style="right:16px;bottom:170px" width="40" height="40" viewBox="0 0 13 13" aria-hidden="true">
+                  <g fill="#FF4FB0" opacity=".5">
+                    <rect x="5" y="5" width="3" height="3"/><rect x="2" y="3" width="2" height="2"/>
+                    <rect x="10" y="9" width="2" height="2"/><rect x="8" y="1" width="1" height="1"/>
+                  </g>
+                </svg>
+              </div>
+
+              <!-- 命中反馈 -->
+              <svg class="hit-splat" id="hitSplat" viewBox="0 0 24 24" aria-hidden="true">
+                <g fill="#FF9E33"><rect x="10" y="9" width="6" height="6"/><rect x="5" y="4" width="3" height="3"/><rect x="17" y="5" width="3" height="3"/><rect x="3" y="14" width="3" height="3"/><rect x="18" y="16" width="3" height="3"/><rect x="11" y="1" width="2" height="2"/><rect x="12" y="20" width="2" height="2"/></g>
+                <g fill="#FF4FB0"><rect x="1" y="8" width="2" height="2"/><rect x="21" y="11" width="2" height="2"/><rect x="7" y="19" width="2" height="2"/></g>
+              </svg>
+
+              <!-- HUD 层 -->
+              <div class="hud">
+                <div class="strip strip-top px">
+                  <div class="cap o">本机<br>单局</div>
+                  <div class="body">
+                    <div class="row"><span class="k">本局得分</span><span class="v g" id="scoreVal">1,280</span></div>
+                  </div>
+                  <div class="cap p">连击<br>×3</div>
+                </div>
+
+                <div class="strip strip-hp px">
+                  <div class="cap g">目标</div>
+                  <div class="body">
+                    <div class="row"><span class="k">剩余墨量</span><span class="v p" id="hpVal">72%</span></div>
+                    <div class="hpbar"><i id="hpFill"></i></div>
+                  </div>
+                </div>
+
+                <div class="strip strip-tray px">
+                  <div class="body">
+                    <div class="tray-title"><span>选物品投掷，不选就揉</span><b id="trayName">未选 · 形变</b></div>
+                    <div class="tray-row" id="tray" role="group" aria-label="物品栏">
+                      <button class="tray-card px" data-name="箭矢" aria-pressed="false"><span class="ic">箭</span><span class="nm">箭矢</span></button>
+                      <button class="tray-card px" data-name="大脑" aria-pressed="false"><span class="ic">脑</span><span class="nm">大脑</span></button>
+                      <button class="tray-card px" data-name="果冻" aria-pressed="false"><span class="ic">冻</span><span class="nm">果冻</span></button>
+                      <button class="tray-card px" data-name="粘粘手" aria-pressed="false"><span class="ic">粘</span><span class="nm">粘粘手</span></button>
+                    </div>
+                  </div>
+                </div>
+
+                <button class="jelly px" id="fireBtn"><span id="fireLabel">揉一下</span> <span class="arrow">▶</span></button>
+              </div>
+
+            </div>
+          </div></div>
+          <div class="shot-caption"><b>分镜一 · 主画面</b>　识别到人 → 点框锁定 → 物品栏选了就投掷、不选就揉形变。切换「识别中／已锁定」和物品栏，按钮文案与动作反馈会跟着变。</div>
+        </div>
+
+        <!-- 图层规则 + 三视图开关 -->
+        <div class="layer-panel">
+          <h3>实景与虚拟，凭什么一眼分开</h3>
+          <p>不是靠颜色，是靠三件事同时成立。右边三视图可以把合成画面拆开验证。</p>
+          <div class="view-switch" role="group" aria-label="图层视图">
+            <button class="view-btn" data-view="reality" aria-pressed="false">只看实景</button>
+            <button class="view-btn" data-view="virtual" aria-pressed="false">只看虚拟</button>
+            <button class="view-btn" data-view="composite" aria-pressed="true">合成画面</button>
+          </div>
+          <div class="view-switch tight" role="group" aria-label="目标锁定状态">
+            <button class="view-btn lock-btn" data-lock="scan" aria-pressed="false">识别中 · 待点选</button>
+            <button class="view-btn lock-btn" data-lock="done" aria-pressed="true">已锁定 · 可操作</button>
+          </div>
+          <div class="layer-rows">
+            <div class="layer-row"><b>实景层</b><span>相机画面去饱和 <em>32%</em>、压到 <em>56%</em> 亮度、<em>0.5px</em> 微模糊 + 暗角。作用是给分镜认场景，不承担任何信息，所以不放文字。</span></div>
+            <div class="layer-row"><b>锚定层</b><span>只锚<em>人</em>：YOLO 识别后先给<em>淡荧光候选框</em>，点选才升级为实线墨框（72%）+ 落地投影 + 距离标签。点选是确认目标，不是选择物体类型。</span></div>
+            <div class="layer-row"><b>界面层</b><span><em>100% 不透明</em> 酱紫板 + 骨白字 + <em>3px 墨黑硬描边</em> + <em>5px 硬阴影</em>。永远在最上，永不与实景混色，这是可读性的底线。</span></div>
+            <div class="layer-row"><b>装饰上限</b><span>墨点只在两个位置出现：锚定框旁的静态喷溅、投掷命中时的一次溅开；不选物品改走形变，用框体挤压回应，不再额外加墨点。没有四角常驻漂浮物、闪烁提示或发光辉光。</span></div>
+            <div class="layer-row"><b>安全区</b><span>左右 <em>12px</em>、底部 <em>22px</em>，8px 网格。所有长条左右对齐同一条线，缩放进 Unity 或裁进分镜都不用重新对位。</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 三个小分镜 -->
+      <div class="stage-row">
+
+        <div class="shot mini">
+          <div class="shot-frame"><div class="phone-wrap"><div class="phone">
+            <div class="notch"></div><div class="halftone"></div>
+            <div class="screen"><div class="screen-inner">
+              <div class="home-title">
+                <div class="big">EARTH<br><em>OL</em></div>
+                <div class="sub">校园解压 · AR 派对</div>
+              </div>
+              <div class="skull-stage">
+                <div class="skull-hp">
+                  <div class="strip px" style="position:relative;left:auto;right:auto">
+                    <div class="cap g">封印</div>
+                    <div class="body"><div class="row"><span class="k">还差几下</span><span class="v g">5</span></div><div class="hpbar self"><i style="width:100%"></i></div></div>
+                  </div>
+                </div>
+                <svg class="px-skull" viewBox="0 0 11 13" shape-rendering="crispEdges" aria-label="像素骷髅">
+                  <path d="M3 1h5v1h1v1h1v5h-1v2h-1v1h-1v1H4v-1H3v-1H2V9H1V3h1V2h1z" fill="#F4F1E8"/>
+                  <path d="M3 5h2v2H3zM7 5h2v2H7z" fill="#100E1C"/>
+                  <path d="M5 8h1v1H5z" fill="#100E1C"/>
+                  <path d="M4 10h3v2H4z" fill="#F4F1E8"/>
+                  <path d="M5 10h1v2H5z" fill="#100E1C"/>
+                  <path d="M3 2h2v1H3z" fill="#FFFFFF" opacity=".75"/>
+                  <rect x="3" y="5" width="2" height="2" fill="#FF4FB0" opacity=".9"/>
+                  <rect x="7" y="5" width="2" height="2" fill="#FF4FB0" opacity=".9"/>
+                </svg>
+                <div class="skull-hint">连点骷髅 · 打破封印</div>
+              </div>
+              <div class="home-foot">戳开就能进场<small>单手可点，五下就够</small></div>
+            </div></div>
+          </div></div></div>
+          <div class="shot-caption"><b>分镜二 · 进场</b>　像素骷髅承接项目现有 CartoonJelly 素材，大字只出现这一次。</div>
+        </div>
+
+        <div class="shot mini">
+          <div class="shot-frame"><div class="phone-wrap"><div class="phone">
+            <div class="notch"></div><div class="halftone"></div>
+            <div class="screen"><div class="screen-inner">
+              <div class="mode-title">今天想怎么玩<small>两种手感，随时能换</small></div>
+              <div class="mode-cards" role="group" aria-label="游戏模式">
+                <button class="mode-card rage px" aria-pressed="true">
+                  <span class="cap"><span>怒</span></span>
+                  <span class="info"><b>连打泄压</b><p>快速连点，墨点跟着手速炸开。一局六十秒，打完就走。</p><span class="tag">连点</span></span>
+                </button>
+                <button class="mode-card chill px" aria-pressed="false">
+                  <span class="cap"><span>松</span></span>
+                  <span class="info"><b>慢揉放空</b><p>长按揉捏软体，形变跟着指尖走。没有倒计时，纯粹解压。</p><span class="tag">长按</span></span>
+                </button>
+              </div>
+              <div class="mode-foot"><button class="jelly dark px" style="position:relative;left:auto;right:auto;bottom:auto;height:44px;font-size:13px;width:100%">就选这个</button></div>
+            </div></div>
+          </div></div></div>
+          <div class="shot-caption"><b>分镜三 · 选模式</b>　两条长条色块面板，荧光只在左端墨盖，信息密度一致。</div>
+        </div>
+
+        <div class="shot mini">
+          <div class="shot-frame"><div class="phone-wrap"><div class="phone">
+            <div class="notch"></div><div class="halftone"></div>
+            <div class="screen"><div class="screen-inner">
+              <div class="result-title">糊赢了<small>这一局你投了 9 次、揉了 3 下，把它糊没了。</small></div>
+              <div class="rank-wrap">
+                <div class="rank-label">本机单局成绩</div>
+                <div class="rank-strip px"><span class="rk g">分</span><span class="nm">本局得分</span><span class="sc">1,280</span></div>
+                <div class="rank-strip px"><span class="rk o">投</span><span class="nm">投中次数</span><span class="sc">9</span></div>
+                <div class="rank-strip px"><span class="rk p">揉</span><span class="nm">形变次数</span><span class="sc">3</span></div>
+              </div>
+              <div class="result-actions">
+                <button class="jelly px">再来一局</button>
+                <button class="jelly dark px">换个模式</button>
+              </div>
+            </div></div>
+          </div></div></div>
+          <div class="shot-caption"><b>分镜四 · 结算</b>　只显示本机单局成绩，三条数据长条，不接多人榜也不需要昵称；文案沿用项目 ResultUI 的句式。</div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ 组件规范 ============ -->
+  <section class="section">
+    <h2>组件规范 · 只有这六种零件</h2>
+    <p class="lede">整套界面由六种零件拼成，不新增第七种。每种零件的圆角阶梯尺寸、描边厚度、阴影偏移都固定，移植进 Unity 时直接做成预制体。</p>
+    <div class="component-grid">
+
+      <div class="comp">
+        <h3>果冻按钮 · 三态</h3>
+        <p>阶梯化大圆角（--s:18px）、三段渐变高光、6px 硬阴影。按下时整体下沉 5px，阴影收成 1px，不用缩放弹跳。</p>
+        <div class="comp-stage">
+          <button class="btn-demo px">投出去</button>
+          <button class="btn-demo px pink">揉一下</button>
+          <button class="btn-demo px off">已用完</button>
+        </div>
+      </div>
+
+      <div class="comp">
+        <h3>长条贴纸 · 信息唯一容器</h3>
+        <p>左侧墨盖标类别，右侧深色承载内容。成绩、预览、血量、状态全用它，不再出现第二种卡片。</p>
+        <div class="comp-stage"><div class="strip-demo px"><span class="cap">分</span><span class="body">本局得分 <b>1,280</b></span></div></div>
+      </div>
+
+      <div class="comp">
+        <h3>像素阶梯角 · 边缘同源</h3>
+        <p>按钮 18px / 面板 9px / 小卡 6px 三档，同一条阶梯曲线。右侧对比：平滑圆角不属于这套语言。</p>
+        <div class="comp-stage"><div class="edge-demo"><div class="edge-box px"></div><div class="edge-box px small"></div><div class="edge-box plain" style="background:#6A6480"></div></div></div>
+      </div>
+
+      <div class="comp">
+        <h3>墨点喷溅 · 方块而非圆点</h3>
+        <p>像素画风的落点：所有墨点都是方块点阵，不用模糊圆。静态只放两簇，投掷命中时才溅开一次。</p>
+        <div class="comp-stage"><div class="splat-demo">
+          <div class="dot-demo"><i></i><i style="grid-column:3"></i><i style="grid-column:2;grid-row:2"></i><i style="grid-column:4;grid-row:3"></i><i style="background:#FF9E33"></i><i style="background:#A8FF45;grid-column:3;grid-row:3"></i></div>
+          <svg width="52" height="52" viewBox="0 0 13 13" aria-hidden="true"><g fill="#FF4FB0"><rect x="5" y="5" width="4" height="4"/><rect x="1" y="3" width="2" height="2"/><rect x="10" y="2" width="2" height="2"/><rect x="2" y="10" width="2" height="2"/><rect x="10" y="9" width="1" height="1"/></g></svg>
+        </div></div>
+      </div>
+
+      <div class="comp">
+        <h3>半调网点 · 深色底纹</h3>
+        <p>9px 主网点 + 18px 偏移的绿调次网点，透明度分别 8.5% 与 4.5%。只做质感，不形成可识别图案。</p>
+        <div class="comp-stage"><div class="half-demo"></div></div>
+      </div>
+
+      <div class="comp">
+        <h3>锚定框 · 贴在识别到的人身上</h3>
+        <p>识别中只给淡荧光细框，点选确认后才升到 72% 实线墨框，略带 1° 手绘倾斜。半透明是「贴着」，不是「浮着」。</p>
+        <div class="comp-stage"><div class="anchor-demo px"></div><div class="type-demo"><span class="a">2.4 m</span><span class="b">已锁定 · 人</span><span class="c">文字只属于界面层</span></div></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ 前后对照 ============ -->
+  <section class="section">
+    <h2>再加工对照 · v1 到 v2</h2>
+    <p class="lede">v1（ui-simulator/index.html）已经把框架和流程跑通了，问题集中在「荧光面积」「图层分离」「装饰密度」和「信息层级」四件事上，改的是分配，不是推倒重来。</p>
+    <div class="compare">
+      <div class="before">
+        <h3>v1 · 已有的界面</h3>
+        <ul>
+          <li><b>荧光大面积铺底</b>：橙色发射按钮、模式 chip、榜单头部整块渐变，加上辉光与闪烁，盯久了刺眼。</li>
+          <li><b>实景和虚拟同为深紫</b>：网格地面 + 抽象人形 + 虚线锁定框，两层明度接近，分不清哪个是相机画面。</li>
+          <li><b>装饰四散</b>：准星、四角锁定角标、侧边 TOP3、常驻 chip、多道提示，同屏抢注意力。</li>
+          <li><b>满屏英文大写</b>：TAP THE SKULL / PICK YOUR SIDEKICK / THROWABLE / SCORE / COMBO / WIN!，中文反而成了附注。</li>
+          <li><b>同款圆角卡片</b>：chip、投掷卡、榜单、面板都是 12–18px 圆角盒 + 软阴影，层级靠字号硬撑。</li>
+          <li><b>没有像素语言</b>：骷髅是平滑曲线，墨点是圆形发光点，和「像素画风」没有共同形状。</li>
+        </ul>
+      </div>
+      <div class="after">
+        <h3>v2 · 本提案</h3>
+        <ul>
+          <li><b>荧光降到 10% 以内</b>：只做墨盖、描边、数值与投掷命中瞬间；深色半调占八成，骨白替代纯白。</li>
+          <li><b>三层硬分离</b>：实景去饱和压暗微模糊，锚定层半透明，界面层 100% 不透明 + 硬描边 + 硬阴影，可用三视图拆开验证。</li>
+          <li><b>装饰设上限</b>：两簇静态像素墨点 + 一次命中溅开，删掉准星、四角标、侧边榜、辉光与闪烁。</li>
+          <li><b>中文主导</b>：「揉一下」「投出去」「本机成绩」，按钮说什么，反馈就说什么；英文只留 HP 一类真术语。</li>
+          <li><b>长条贴纸统一容器</b>：成绩、预览、血量、状态共用一种结构，圆角阶梯按层级分三档而非一刀切。</li>
+          <li><b>像素语言贯穿</b>：阶梯角、方块墨点、像素骷髅、crispEdges 描边，果冻按钮依旧圆润立体。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 已确认的交互 ============ -->
+  <section class="section">
+    <h2>已拍板 · 交互逻辑</h2>
+    <p class="lede">按你定的四条收紧了主分镜与结算分镜。下面每条都对应界面里一个可操作的状态，不是待办。</p>
+    <div class="questions">
+      <div class="q"><h3>锚定：识别到人，点选锁定人</h3><p>识别到人后先给淡荧光候选框，点一下才升级成实线墨框；锚定对象只限人，不做任意物体锚点。主分镜的「识别中／已锁定」开关可以直接验证两态。</p><div class="opts">对应工程：ObjectScanner 候选框 + PersonTracker 人检测 → 点选确认</div></div>
+      <div class="q"><h3>主操作：选物品投掷，不选就形变</h3><p>物品栏选中物品 → 按钮变「投出去」，点按投掷；不选任何物品 → 按钮是「揉一下」，点按触发软体形变。再点一次已选物品即取消选中。</p><div class="opts">对应工程：ThrowModeRuntime 投掷 / PokeDeform 软体形变</div></div>
+      <div class="q"><h3>成绩：本机单局</h3><p>结算只显示本机这一局的三条数据：得分、投中次数、形变次数。不接多人榜与校园榜，因此不需要昵称、名次和刷新状态。</p><div class="opts">对应工程：ResultUI 汇总 AttackHistory</div></div>
+      <div class="q"><h3>进场：保留骷髅门破封印</h3><p>首页连点像素骷髅打破封印后进场，派对仪式感保留；像素骷髅承接项目 CartoonJelly 素材，不做首次启动跳过。</p><div class="opts">对应工程：沿用 v1 首页流程</div></div>
+    </div>
+  </section>
+
+  <footer class="board-foot">
+    <div>视觉方向板 v2 · 参考 ui-simulator/index.html（v1）与项目内 CartoonJelly / Throwables 素材<br />色值、字阶、阶梯角尺寸均可直接作为 Unity UGUI 预制体参数使用。</div>
+    <div>分镜格统一 320×590 · 9:16 · 可直接截图进故事板<br />键盘焦点、减少动效、窄屏单列均已适配。</div>
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  var ui = document.getElementById('arUI');
+  var view = 'composite', lock = 'done';
+  function paint(){ ui.className = 'ui view-' + view + (lock === 'scan' ? ' lock-scan' : ''); }
+
+  /* 三视图：可验证的图层分离 */
+  var viewBtns = document.querySelectorAll('.view-btn[data-view]');
+  viewBtns.forEach(function(btn){
+    btn.addEventListener('click', function(){
+      view = btn.dataset.view; paint();
+      viewBtns.forEach(function(b){ b.setAttribute('aria-pressed', String(b === btn)); });
+    });
+  });
+
+  /* 识别中 / 已锁定：只锚定人，点选才确认 */
+  var lockBtns = document.querySelectorAll('.lock-btn');
+  var lockTag = document.getElementById('lockTag');
+  function setLock(state){
+    lock = state; paint();
+    lockTag.textContent = state === 'scan' ? '点一下锁定这个人' : '已锁定 · 人 · 2.4 m';
+    lockBtns.forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.lock === state)); });
+  }
+  lockBtns.forEach(function(btn){
+    btn.addEventListener('click', function(){ setLock(btn.dataset.lock); });
+  });
+  var anchorBox = document.getElementById('anchorBox');
+  anchorBox.addEventListener('click', function(){ setLock('done'); });
+  anchorBox.addEventListener('keydown', function(e){
+    if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); setLock('done'); }
+  });
+
+  /* 物品栏：选中投掷，不选形变（点已选卡片可取消） */
+  var tray = document.getElementById('tray');
+  var trayName = document.getElementById('trayName');
+  var fire = document.getElementById('fireBtn');
+  var fireLabel = document.getElementById('fireLabel');
+  var picked = '';
+  function setPicked(name){
+    picked = name;
+    tray.querySelectorAll('.tray-card').forEach(function(c){
+      c.setAttribute('aria-pressed', String(name !== '' && c.dataset.name === name));
+    });
+    trayName.textContent = name ? name + ' · 投掷' : '未选 · 形变';
+    fireLabel.textContent = name ? '投出去' : '揉一下';
+  }
+  tray.addEventListener('click', function(e){
+    var card = e.target.closest('.tray-card');
+    if(!card) return;
+    setPicked(card.dataset.name === picked ? '' : card.dataset.name);
+  });
+
+  /* 主操作：动效只回答这一次点击 */
+  var splat = document.getElementById('hitSplat');
+  var score = document.getElementById('scoreVal');
+  var hpVal = document.getElementById('hpVal');
+  var hpFill = document.getElementById('hpFill');
+  var total = 1280, hp = 72;
+  fire.addEventListener('click', function(){
+    var throwing = picked !== '';
+    total += throwing ? 120 : 60;
+    hp = Math.max(0, hp - 9);
+    score.textContent = total.toLocaleString('en-US');
+    hpVal.textContent = hp + '%';
+    hpFill.style.width = hp + '%';
+    fireLabel.textContent = throwing ? '投中了' : '揉到了';
+    if(throwing){
+      splat.classList.remove('go'); void splat.offsetWidth; splat.classList.add('go');
+    } else {
+      anchorBox.classList.remove('wobble'); void anchorBox.offsetWidth; anchorBox.classList.add('wobble');
+    }
+    clearTimeout(fire._t);
+    fire._t = setTimeout(function(){ fireLabel.textContent = picked ? '投出去' : '揉一下'; }, 1400);
+  });
+
+  /* 模式卡选中 */
+  document.querySelectorAll('.mode-card').forEach(function(card){
+    card.addEventListener('click', function(){
+      document.querySelectorAll('.mode-card').forEach(function(c){ c.setAttribute('aria-pressed','false'); });
+      card.setAttribute('aria-pressed','true');
+    });
+  });
+})();
+</script>
+</body>
+</html>

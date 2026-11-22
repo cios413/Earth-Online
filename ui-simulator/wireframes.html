@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EARTH OL · UI 逻辑线框墙</title>
+<style>
+/* ===== Phase 1 定稿变量（直接落地） =====
+   缩放比例变量在 :root 声明唯一一次（.62），任何 @media（含 print）都不得再覆盖。 */
+:root{
+  --wf-w:432px; --wf-h:768px; --wf-scale:.62;
+  --wf-pad:16px; --wf-unit:4px; --wf-gutter:8px; --wf-col:94px;
+  --wf-bg:#F7F8FA; --wf-surface:#FFFFFF; --wf-canvas:#FFFFFF;
+  --wf-line:#1F2430; --wf-line-2:#6B7280; --wf-line-3:#C9CED6;
+  --wf-fill:#E8EBF0; --wf-fill-strong:#B9C0CC;
+  --wf-hatch-bg:#F2F4F7; --wf-dash:#8A93A3;
+  --wf-text:#1F2430; --wf-text-2:#5A6270; --wf-text-3:#8A93A3;
+  --wf-mode-attack:#B4235A; --wf-mode-free:#3F6B1E;
+  --wf-flag:#B3261E; --wf-flag-bg:#FDECEA;
+  --wf-bw:2px; --wf-bw-thin:1px; --wf-lead:1px;
+  --wf-r-card:8px; --wf-r-box:4px;
+  --wf-fs-xs:11px; --wf-fs-sm:12px; --wf-fs-md:14px; --wf-fs-lg:18px; --wf-fs-xl:24px;
+  --wf-sp-1:4px; --wf-sp-2:8px; --wf-sp-3:12px; --wf-sp-4:16px;
+  --wf-sp-6:24px; --wf-sp-8:32px;
+  --wf-card-w:320px; --wf-grid-gap:24px; --wf-page-pad:32px;
+  --wf-slot-w:calc(432px * var(--wf-scale));
+  --wf-slot-h:calc(768px * var(--wf-scale));
+}
+*{box-sizing:border-box}
+html{scroll-behavior:auto}
+body{
+  margin:0;padding:0;background:var(--wf-bg);color:var(--wf-text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:14px;line-height:1.5;font-weight:400;
+}
+.wf-page{max-width:1440px;margin:0 auto;padding:var(--wf-page-pad)}
+
+/* ===== 页头 ===== */
+.wf-head{border-bottom:2px solid var(--wf-line);padding-bottom:20px;margin-bottom:32px}
+.wf-head h1{font-size:24px;font-weight:700;margin:0 0 8px;line-height:1.3}
+.wf-head-sub{font-size:12px;color:var(--wf-text-2);margin:0 0 16px;line-height:1.6}
+.wf-legend{margin:0 0 16px;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:6px 24px}
+.wf-legend > div{display:flex;gap:8px;font-size:12px;line-height:1.5}
+.wf-legend dt{flex:0 0 22px;font-weight:700;font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--wf-text-2)}
+.wf-legend dd{margin:0;color:var(--wf-text)}
+.wf-head-tools{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.wf-print-btn{
+  font:inherit;font-size:12px;font-weight:600;color:var(--wf-text);background:var(--wf-surface);
+  border:2px solid var(--wf-line);border-radius:4px;padding:8px 14px;cursor:pointer;
+}
+.wf-print-note{font-size:12px;color:var(--wf-text-2)}
+
+/* ===== 分组 ===== */
+.wf-group{margin:0 0 32px}
+.wf-group-title{position:relative;font-size:18px;font-weight:700;line-height:1.4;margin:0 0 8px;padding:0 0 8px 12px;border-bottom:1px solid var(--wf-line-3)}
+.wf-group-title::before{content:"";position:absolute;left:0;top:2px;bottom:10px;width:3px;background:var(--wf-line-2)}
+.wf-group-note{font-size:12px;color:var(--wf-text-2);margin:0 0 16px}
+.wf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:var(--wf-grid-gap);align-items:start}
+
+/* ===== 卡片 ===== */
+.wf-card{
+  min-width:0;background:var(--wf-surface);border:1px solid var(--wf-line-3);
+  border-radius:var(--wf-r-card);padding:var(--wf-pad);
+}
+.wf-card-head{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.wf-card-id{
+  flex:0 0 22px;width:22px;height:22px;border-radius:4px;background:var(--wf-line);color:var(--wf-surface);
+  font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;line-height:1;
+}
+.wf-card-name{font-size:14px;font-weight:700;line-height:22px;margin-right:auto}
+.wf-card-tags{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.wf-tag{font-size:11px;font-weight:600;color:var(--wf-text-2);border:1px solid var(--wf-line-3);border-radius:4px;padding:1px 5px;line-height:18px;white-space:nowrap}
+.wf-card-desc{font-size:12px;color:var(--wf-text-2);line-height:1.5;margin:0 0 12px;min-height:36px}
+.wf-legacy-inline{display:inline-block;font-size:12px;font-weight:700;color:var(--wf-flag);border:1px dashed var(--wf-flag);border-radius:4px;padding:1px 6px;margin:0 0 12px}
+.wf-card-rule{border-top:1px solid var(--wf-line-3);margin:12px 0}
+
+/* ===== 画布槽 / 唯一逻辑画布：固定 432×768 = 9:16 ===== */
+.wf-slot{position:relative;width:var(--wf-slot-w);height:var(--wf-slot-h);aspect-ratio:9/16;flex:none;margin:0 auto;overflow:hidden}
+.wf-canvas{
+  width:432px;height:768px;transform:scale(var(--wf-scale));transform-origin:top left;
+  position:absolute;inset:0 auto auto 0;background:var(--wf-canvas);
+  --c-fs:18px;
+  font-size:var(--c-fs);color:var(--wf-text);line-height:1.2;
+}
+.wf-hatch{background-color:var(--wf-hatch-bg);background-image:repeating-linear-gradient(45deg,var(--wf-line-3) 0 1px,transparent 1px 6px)}
+.wf-dashed{border:1.5px dashed var(--wf-dash);background:transparent}
+.wf-solid{background:var(--wf-fill);border:var(--wf-bw) solid var(--wf-line);border-radius:var(--wf-r-box)}
+.wf-active{background:var(--wf-fill-strong);border:var(--wf-bw) solid var(--wf-line);border-radius:var(--wf-r-box)}
+.wf-canvas-slot{border:1px solid var(--wf-line-3);border-radius:var(--wf-r-box);padding:0}
+
+/* 画布内区域 */
+.wf-region{position:absolute}
+.wf-region-box{
+  position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;
+  gap:2px;padding:20px 6px 4px;overflow:hidden;text-align:center;
+}
+.wf-region-box.fill-solid,.wf-region-box.fill-active{border-radius:var(--wf-r-box)}
+.wf-region-box.fill-hatch{border:var(--wf-bw) solid var(--wf-line);border-radius:var(--wf-r-box)}
+.wf-region-box.fill-dashed{border-radius:var(--wf-r-box)}
+.wf-region-box.fill-text,.wf-region-box.fill-none{border:0;background:transparent}
+.wf-region-box.accent-attack{border-left:2px solid var(--wf-mode-attack)}
+.wf-region-box.accent-free{border-left:2px solid var(--wf-mode-free)}
+.wf-region-box.shape-sharp{border-radius:4px}
+.wf-region-box.shape-sharp::after{
+  content:"";position:absolute;top:0;right:0;width:10px;height:10px;
+  border-left:1px solid var(--wf-line);border-bottom:1px solid var(--wf-line);background:var(--wf-canvas);
+}
+.wf-region-box.shape-round{border-radius:8px}
+.wf-region-box.shape-circle{border-radius:50%}
+/* 独立角标层：.wf-canvas 直属子节点 z-index 7，不受 .wf-region 层叠上下文限制 */
+.wf-tags-layer{position:absolute;inset:0;z-index:7;pointer-events:none}
+.wf-region-tag{
+  position:absolute;z-index:7;background:transparent;width:auto;
+  color:var(--wf-text-3);font-size:18px;font-weight:600;line-height:1;
+  white-space:nowrap;pointer-events:none;
+}
+.wf-ln{display:block;font-size:var(--c-fs);line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.wf-ln.tiny{font-size:18px}
+.wf-ln.title{font-size:24px;font-weight:700}
+.wf-ln.red{color:var(--wf-flag);font-weight:700}
+.wf-ln.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:600}
+.wf-ln.atk{color:var(--wf-mode-attack);font-weight:700}
+.wf-ln.free{color:var(--wf-mode-free);font-weight:700}
+
+/* 画布内构件 */
+.wf-segs{display:flex;gap:8px;width:100%;padding:2px 0}
+.wf-seg{flex:1;height:12px;background:var(--wf-fill-strong);border:2px solid var(--wf-line);border-radius:4px}
+.wf-seg.off{background:transparent;border:1.5px dashed var(--wf-dash)}
+.wf-hp-top{display:flex;gap:8px;align-items:center;justify-content:center;font-size:var(--c-fs);font-weight:600}
+.wf-dock-handle{font-size:var(--c-fs);font-weight:600;border:2px solid var(--wf-line);background:var(--wf-fill);border-radius:4px;padding:1px 6px}
+.wf-dock-items{display:flex;gap:8px;justify-content:center;width:100%;margin-top:4px}
+.wf-item{
+  width:94px;height:56px;display:flex;align-items:center;justify-content:center;font-size:var(--c-fs);
+  border:1.5px dashed var(--wf-dash);background:transparent;border-radius:4px;
+}
+.wf-item.open{background:var(--wf-fill);border:2px solid var(--wf-line)}
+.wf-item.sel{background:var(--wf-fill-strong);border:2px solid var(--wf-line);font-weight:700}
+.wf-skin-btn{font-size:var(--c-fs);font-weight:600;border:1.5px dashed var(--wf-dash);border-radius:8px;padding:1px 6px;background:transparent}
+.wf-skin-btn.show{background:var(--wf-fill);border:2px solid var(--wf-line)}
+.wf-skin-dot{display:inline-block;width:8px;height:8px;border-radius:50%;border:1px solid var(--wf-line);margin-right:3px;vertical-align:middle}
+.wf-skin-dot.orange{background:var(--wf-fill-strong)}
+.wf-skin-panel{display:flex;align-items:center;gap:4px;width:100%;border:1.5px dashed var(--wf-dash);border-radius:4px;padding:2px;font-size:var(--c-fs)}
+.wf-skin-panel.open{border:2px solid var(--wf-line);background:var(--wf-fill)}
+.wf-skin-nav{flex:0 0 18px;font-size:var(--c-fs);font-weight:700}
+.wf-swatches{display:flex;gap:4px;flex:1;justify-content:center}
+.wf-swatch{flex:1;max-width:88px;font-size:var(--c-fs);border:1.5px dashed var(--wf-dash);border-radius:4px;padding:1px;background:transparent}
+.wf-swatch.filled{background:var(--wf-fill);border:2px solid var(--wf-line)}
+.wf-swatch.cur{background:var(--wf-fill-strong);border:2px solid var(--wf-line);outline:1px solid var(--wf-line);outline-offset:2px;font-weight:700}
+.wf-mode-row{display:flex;gap:4px;width:100%;justify-content:flex-start;align-items:center}
+.wf-mode-btn{font-size:var(--c-fs);font-weight:700;padding:1px 5px;border:1.5px dashed var(--wf-dash);background:transparent;border-radius:8px}
+.wf-mode-btn.atk{border-radius:4px;color:var(--wf-mode-attack)}
+.wf-mode-btn.free{color:var(--wf-mode-free)}
+.wf-mode-btn.on{background:var(--wf-fill-strong);border:2px solid var(--wf-line)}
+.wf-mode-btn.light{background:var(--wf-fill);border:2px solid var(--wf-line)}
+.wf-mode-flag{font-size:var(--c-fs);font-weight:600;white-space:nowrap}
+.wf-anchor-tag{font-size:var(--c-fs);font-weight:600;margin-top:4px}
+.wf-corner{position:absolute;width:8px;height:8px;border:2px solid var(--wf-line)}
+.wf-corner.c1{left:0;top:0;border-right:0;border-bottom:0}
+.wf-corner.c2{right:0;top:0;border-left:0;border-bottom:0}
+.wf-corner.c3{left:0;bottom:0;border-right:0;border-top:0}
+.wf-corner.c4{right:0;bottom:0;border-left:0;border-top:0}
+.wf-check{position:absolute;right:4px;top:4px;width:16px;height:16px;border-radius:50%;border:2px solid var(--wf-line);display:flex;align-items:center;justify-content:center;font-size:var(--c-fs);font-weight:700}
+.wf-hair{width:100%;border-top:1px solid var(--wf-line-3)}
+
+/* ===== R2：横滑背包 / 老鼠干 / 替换弹窗（全灰阶，复用既有语义类） ===== */
+.wf-bag{display:flex;flex-direction:column;align-items:center;gap:3px;width:100%}
+.wf-bag-handle{display:flex;align-items:center;justify-content:space-between;width:100%;height:28px;border:2px solid var(--wf-line);background:var(--wf-fill);border-radius:4px;padding:0 6px;font-size:18px;font-weight:600}
+.wf-bag-chip{font-size:18px;font-weight:700;border:1px solid var(--wf-line);border-radius:4px;padding:0 3px;line-height:18px}
+.wf-bag-row{display:flex;align-items:center;gap:4px;width:100%}
+.wf-bag-nav{flex:0 0 16px;width:16px;height:24px;border:1px solid var(--wf-line-2);border-radius:4px;font-size:18px;display:flex;align-items:center;justify-content:center}
+.wf-bag-track{display:flex;gap:8px;flex:1;height:92px;overflow:hidden;border:1px solid var(--wf-line-3);border-radius:4px;padding:4px;background:var(--wf-surface)}
+.wf-bag-card{flex:0 0 94px;width:94px;height:56px;display:flex;align-items:center;justify-content:center;font-size:18px;border:2px solid var(--wf-line);background:var(--wf-fill);border-radius:4px}
+.wf-bag-rat{flex:0 0 94px;width:94px;height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font-size:18px;border-radius:4px}
+.wf-bag-rat.empty{border:1.5px dashed var(--wf-dash);background:transparent}
+.wf-bag-rat.filled{border:2px solid var(--wf-line);background:var(--wf-fill-strong)}
+.wf-bag-rat.locked{border:1.5px dashed var(--wf-dash);background:transparent}
+.wf-rat-mini{display:block;width:36px;height:44px;border:1px solid var(--wf-line-3);border-radius:4px}
+.wf-bag-axis{display:flex;align-items:center;justify-content:space-around;width:100%;height:8px;border-top:1px solid var(--wf-line-2)}
+.wf-bag-tick{width:4px;height:4px;border-radius:50%;background:var(--wf-line-2)}
+.wf-rat{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:100%}
+.wf-rat-figure{display:block;width:48px;height:64px;border:1px solid var(--wf-line-3);border-radius:8px}
+.wf-rat-chip{position:absolute;right:2px;top:22px;width:36px;height:20px;font-size:18px;line-height:18px;font-weight:700;border:1px solid var(--wf-line);border-radius:4px;background:var(--wf-surface)}
+.wf-modal{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;width:100%}
+.wf-modal-title{font-size:24px;font-weight:700}
+.wf-modal-compare{display:flex;align-items:center;gap:6px}
+.wf-modal-box{width:120px;height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:1.5px dashed var(--wf-dash);border-radius:8px;font-size:18px}
+.wf-modal-figure{display:block;width:64px;height:80px;border:1px solid var(--wf-line-3);border-radius:4px}
+.wf-modal-arrow{font-size:24px;font-weight:700}
+.wf-modal-actions{display:flex;gap:8px;align-items:center}
+.wf-modal-btn{width:160px;height:40px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;border-radius:4px}
+.wf-modal-btn.primary{background:var(--wf-fill-strong);border:2px solid var(--wf-line)}
+.wf-modal-btn.secondary{background:var(--wf-fill);border:2px solid var(--wf-line)}
+/* R2 精确增量：长按充能 / 安全区 / 拖拽预览 / 单槽 ✕ 与计数 */
+.wf-bag-rat{position:relative}
+.wf-bag-rat.filled{padding-right:20px}
+.wf-bag-x{position:absolute;right:2px;top:2px;width:20px;height:20px;font-size:18px;font-weight:700;line-height:18px;text-align:center;border:1px solid var(--wf-line);border-radius:4px;background:var(--wf-surface)}
+.wf-bag-count{font-size:18px;font-weight:700;color:var(--wf-text-2);white-space:nowrap}
+.wf-rat-remove{position:absolute;left:2px;top:22px;width:20px;height:20px;font-size:18px;font-weight:700;line-height:18px;text-align:center;border:1px solid var(--wf-line);border-radius:4px;background:var(--wf-surface)}
+.wf-safe{border:1.5px dashed var(--wf-dash);border-radius:8px}
+.wf-safe-tag{position:absolute;left:2px;top:2px;max-width:calc(100% - 4px);font-size:18px;color:var(--wf-text-2);background:var(--wf-surface);padding:0 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wf-charge-strip{border:1px solid var(--wf-line-2);border-radius:4px}
+.wf-charge-strip::after{content:"";position:absolute;left:2px;bottom:3px;width:70%;height:4px;background:var(--wf-fill-strong);border-radius:4px}
+.wf-drag-ghost{border:1.5px dashed var(--wf-dash);border-radius:8px}
+.wf-drop-strip{border:1.5px dashed var(--wf-dash);border-radius:8px}
+
+/* 画布内热点 / 引线 / 疑点框 / 文案 */
+.wf-hotspot{position:absolute;width:16px;height:16px;border:1.5px solid var(--wf-line);border-radius:50%;background:var(--wf-canvas);z-index:6}
+.wf-hotspot::after{content:"";position:absolute;left:50%;top:50%;width:4px;height:4px;margin:-2px 0 0 -2px;background:var(--wf-line)}
+.wf-hotspot.sh-tap::after{border-radius:50%}
+.wf-hotspot.sh-hold::after{width:8px;height:2px;margin:-1px 0 0 -4px}
+.wf-hotspot.sh-key::after{content:"↵";width:100%;height:auto;left:0;top:-2px;margin:0;background:transparent;color:var(--wf-line);font-size:var(--c-fs);text-align:center;line-height:16px}
+.wf-hotspot.sh-swipe::after{content:"↔";width:100%;height:auto;left:0;top:-2px;margin:0;background:transparent;color:var(--wf-line);font-size:var(--c-fs);text-align:center;line-height:16px}
+.wf-hotspot.sh-block::after{content:"×";width:100%;height:auto;left:0;top:-3px;margin:0;background:transparent;color:var(--wf-line);font-size:var(--c-fs);text-align:center;line-height:16px}
+.wf-hotspot-num{position:absolute;z-index:6;font-size:var(--c-fs);font-weight:600;color:var(--wf-text-2);white-space:nowrap;background:var(--wf-surface);padding:0 2px;border-radius:4px}
+.wf-leader{position:absolute;inset:0;width:100%;height:100%;z-index:4;pointer-events:none}
+.wf-leader polyline{fill:none;stroke:var(--wf-line-2);stroke-width:1}
+.wf-leader circle{fill:var(--wf-line-2)}
+.wf-leader-lbl{font-size:var(--c-fs);fill:var(--wf-text-2);font-weight:600;paint-order:stroke fill;stroke:var(--wf-surface);stroke-width:3px}
+.wf-doubt-box{position:absolute;border:1px dashed var(--wf-flag);background:transparent;z-index:5}
+.wf-doubt-badge{
+  position:absolute;right:0;top:0;
+  width:26px;height:26px;
+  background:var(--wf-flag);color:var(--wf-surface);font-size:18px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;line-height:1;z-index:8;
+}
+.wf-strip{position:absolute;z-index:3;background:transparent;font-size:var(--c-fs);text-align:center}
+.wf-strip-dashed{border:1.5px dashed var(--wf-dash);background:transparent}
+
+/* ===== 表 / 清单 / 疑点条 ===== */
+.wf-table{width:100%;border-collapse:collapse;font-size:12px;line-height:1.45}
+.wf-table caption{text-align:left;font-size:12px;font-weight:700;color:var(--wf-text);padding:0 0 8px}
+.wf-table th,.wf-table td{border:1px solid var(--wf-line-3);padding:5px 7px;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+.wf-table th{background:var(--wf-hatch-bg);font-weight:700}
+.wf-table td:first-child{white-space:nowrap;font-weight:600;color:var(--wf-text-2)}
+.wf-index-table th:first-child,.wf-index-table td:first-child{width:40px}
+.wf-index-table th:nth-child(2),.wf-index-table td:nth-child(2){width:36%}
+.wf-index-table td:last-child{white-space:normal;overflow-wrap:anywhere}
+.wf-index-note td{font-size:12px;color:var(--wf-text-2);font-weight:400;white-space:normal;overflow-wrap:anywhere}
+.wf-hotspot-list{margin:12px 0 0;padding:0;list-style:none;font-size:12px;line-height:1.55;color:var(--wf-text)}
+.wf-hotspot-list li{padding:2px 0;border-bottom:1px solid var(--wf-line-3)}
+.wf-hotspot-list li:last-child{border-bottom:0}
+.wf-hotspot-list b{font-weight:700;font-family:ui-monospace,Menlo,Consolas,monospace}
+.wf-doubt-bar{
+  position:relative;margin-top:8px;padding:7px 8px 7px 12px;font-size:12px;line-height:1.5;
+  color:var(--wf-flag);background:var(--wf-flag-bg);border:1px dashed var(--wf-flag);border-radius:var(--wf-r-box);
+}
+.wf-doubt-bar::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--wf-flag)}
+.wf-doubt-bar b{font-weight:700}
+
+/* ===== 状态切换控件 ===== */
+.wf-state-switch{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 16px;padding:12px;border:1px solid var(--wf-line-3);border-radius:var(--wf-r-card);background:var(--wf-surface)}
+.wf-state-btn{
+  font:inherit;font-size:12px;font-weight:600;color:var(--wf-text);background:var(--wf-surface);
+  border:1px solid var(--wf-line-2);border-radius:4px;padding:6px 10px;cursor:pointer;
+}
+.wf-state-btn[aria-pressed="true"]{background:var(--wf-fill-strong);border:2px solid var(--wf-line);padding:5px 9px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+:focus-visible{outline:2px solid var(--wf-line);outline-offset:2px}
+.wf-variant-print{display:none}
+.wf-switch-slot{min-width:0}
+
+/* ===== F-00 流程 / 状态图（全站唯一一份） ===== */
+.wf-flow{border:1px solid var(--wf-line-3);border-radius:var(--wf-r-card);background:var(--wf-surface);padding:16px;margin:0 0 32px}
+.wf-flow-title{font-size:18px;font-weight:700;margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid var(--wf-line-3)}
+.wf-flow-graph{display:flex;gap:24px;align-items:flex-start;margin-bottom:20px}
+.wf-flow-track{display:flex;align-items:center;gap:10px;flex:1;min-width:0;flex-wrap:wrap}
+.wf-flow-aside{flex:0 0 250px;border-left:1px dashed var(--wf-line-3);padding-left:16px}
+.wf-node{
+  background:var(--wf-surface);border:1px solid var(--wf-line);border-radius:4px;min-height:36px;
+  padding:7px 10px;font-size:12px;font-weight:600;display:flex;flex-direction:column;gap:2px;min-width:120px;
+}
+.wf-node .wf-node-id{font-size:11px;font-weight:400;font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--wf-text-2)}
+.wf-node small{font-size:11px;font-weight:400;color:var(--wf-text-2)}
+.wf-node-iso{border:1.5px dashed var(--wf-line-2);color:var(--wf-text-2)}
+.wf-node-loop{border:1.5px dashed var(--wf-line-2)}
+.wf-flow-edges{display:flex;flex-direction:column;gap:8px;min-width:190px;flex:1}
+.wf-edge{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--wf-text-2);line-height:1.35}
+.wf-edge-line{flex:0 0 20px;height:0;border-top:1px solid var(--wf-line-2)}
+.wf-edge.e-dash .wf-edge-line{border-top:1px dashed var(--wf-line-2)}
+.wf-edge.e-attack{color:var(--wf-mode-attack);font-weight:600}
+.wf-edge.e-free{color:var(--wf-mode-free);font-weight:600}
+.wf-edge.e-attack .wf-edge-line{border-top-color:var(--wf-mode-attack)}
+.wf-edge.e-free .wf-edge-line{border-top-color:var(--wf-mode-free)}
+.wf-edge-arrow{flex:0 0 10px;width:10px;height:10px;display:inline-block}
+.wf-edge-arrow.v{display:none}
+.wf-edge-arrow polygon{fill:currentColor}
+.wf-edge-label{flex:1;min-width:0}
+.wf-edge-stub{font-weight:600}
+
+/* ===== 页脚 ===== */
+.wf-foot{border-top:2px solid var(--wf-line);padding-top:16px;font-size:12px;color:var(--wf-text-2);line-height:1.7}
+.wf-foot p{margin:0 0 8px}
+
+/* ===== 响应式：只改列数 / 页边距 / 卡片内边距；--wf-scale 恒为 .62，绝不缩手机 ===== */
+@media (min-width:1920px){
+  :root{--wf-page-pad:32px}
+  .wf-page{max-width:1440px}
+  .wf-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+@media (min-width:1280px) and (max-width:1919px){
+  :root{--wf-page-pad:32px}
+  .wf-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+@media (min-width:900px) and (max-width:1279px){
+  :root{--wf-page-pad:24px}
+  .wf-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media (min-width:600px) and (max-width:899px){
+  :root{--wf-page-pad:16px}
+  .wf-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .wf-flow-graph{flex-direction:column}
+  .wf-flow-track{flex-direction:column;align-items:stretch}
+  .wf-flow-aside{flex:none;width:100%;border-left:0;border-top:1px dashed var(--wf-line-3);padding-left:0;padding-top:12px;margin-top:12px}
+  .wf-edge-arrow.h{display:none}
+  .wf-edge-arrow.v{display:inline-block}
+}
+@media (min-width:340px) and (max-width:599px){
+  :root{--wf-page-pad:12px}
+  .wf-grid{grid-template-columns:1fr}
+  .wf-card{padding:12px}
+  .wf-flow-graph{flex-direction:column}
+  .wf-flow-track{flex-direction:column;align-items:stretch}
+  .wf-flow-aside{flex:none;width:100%;border-left:0;border-top:1px dashed var(--wf-line-3);padding-left:0;padding-top:12px;margin-top:12px}
+  .wf-edge-arrow.h{display:none}
+  .wf-edge-arrow.v{display:inline-block}
+}
+@media (max-width:339px){
+  :root{--wf-page-pad:12px}
+  .wf-page{overflow-x:auto}
+  .wf-grid{grid-template-columns:1fr;min-width:300px}
+  .wf-card{padding:12px}
+  .wf-flow-graph{flex-direction:column}
+  .wf-flow-track{flex-direction:column;align-items:stretch}
+  .wf-flow-aside{flex:none;width:100%;border-left:0;border-top:1px dashed var(--wf-line-3);padding-left:0;padding-top:12px;margin-top:12px}
+  .wf-edge-arrow.h{display:none}
+  .wf-edge-arrow.v{display:inline-block}
+}
+
+/* ===== 无障碍兜底 ===== */
+@media (prefers-contrast:more){:root{--wf-line:#000;--wf-line-2:#333;--wf-line-3:#767676}}
+@media (forced-colors:active){
+  .wf-card,.wf-flow,.wf-node,.wf-region-box,.wf-seg,.wf-item,.wf-mode-btn,.wf-doubt-box,.wf-doubt-bar,.wf-table th,.wf-table td,.wf-state-btn,.wf-print-btn{border:1px solid CanvasText}
+}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+
+/* ===== 打印 ===== */
+@page{size:A4 portrait;margin:12mm}
+@media print{
+  :root{--wf-page-pad:0}
+  html,body{background:#FFFFFF;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .wf-page{max-width:none;padding:0}
+  .wf-print-btn,.wf-print-note,.wf-state-switch,.wf-switch-slot{display:none!important}
+  .wf-variant-print{display:block!important}
+  .wf-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px}
+  .wf-card,.wf-group,.wf-flow{break-inside:avoid;page-break-inside:avoid}
+  .wf-doubt-bar{background:transparent;border:1px solid var(--wf-flag);color:var(--wf-flag)}
+  .wf-group{margin-bottom:16px}
+  .wf-flow{margin-bottom:16px}
+}
+</style>
+</head>
+<body>
+<div class="wf-page">
+
+  <!-- ===== 页头 ===== -->
+  <header class="wf-head">
+    <h1>EARTH OL · UI 逻辑线框墙</h1>
+    <p class="wf-head-sub">忠实还原 inkplay.html 代码现状：4 张主屏 + WF-03 状态变体 + 全局流程/状态图；红字疑点条只标注矛盾、不修正逻辑；R2 增补：自由模式老鼠干（长按 700ms / 单槽 1/1 / 替换弹窗）与横滑背包，见 WF-03h / WF-03i。</p>
+    <dl class="wf-legend">
+      <div><dt>L1</dt><dd>实心浅灰 = 存在；深实心 = 激活 / 选中</dd></div>
+      <div><dt>L2</dt><dd>45° 斜线 = 占位（AR 实景 / 图标位）</dd></div>
+      <div><dt>L3</dt><dd>虚线无填充 = 条件 / 未展开 / 隐藏</dd></div>
+      <div><dt>L4</dt><dd>大 X = 省略（演示控制台不画入）</dd></div>
+      <div><dt>L5</dt><dd>玫红 #B4235A +「战斗」+ 尖角 = 战斗；绿 #3F6B1E +「自由」+ 圆润 = 自由</dd></div>
+      <div><dt>L6</dt><dd>红虚线框 + [疑点 Qn] + ? = 逻辑疑点（字 #B3261E / 底 #FDECEA）</dd></div>
+    </dl>
+    <div class="wf-head-tools">
+      <button type="button" class="wf-print-btn" id="wfPrintBtn">打印 / 展开全部状态</button>
+      <span class="wf-print-note">打印时所有状态变体自动展开，9 张变体卡并列铺开。</span>
+    </div>
+  </header>
+
+  <!-- ===== F-00 流程 / 状态图（全局唯一一份） ===== -->
+  <section class="wf-flow" data-block="F-00">
+    <h2 class="wf-flow-title">流程 / 状态图</h2>
+    <div class="wf-flow-graph">
+      <div class="wf-flow-track">
+        <div class="wf-node" data-node="N01"><span class="wf-node-id">N01</span>01 开场 · 双外星人</div>
+        <div class="wf-flow-edges">
+          <div class="wf-edge e-attack" data-edge="E1">
+            <i class="wf-edge-line"></i>
+            <span class="wf-edge-arrow h"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><polygon points="0,0 10,5 0,10"/></svg></span>
+            <span class="wf-edge-arrow v"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><polygon points="0,0 10,0 5,10"/></svg></span>
+            <span class="wf-edge-label">E1 N01→N03 实线：连点 5 下 → 战斗（玫红圆形转场）</span>
+          </div>
+          <div class="wf-edge e-free" data-edge="E2">
+            <i class="wf-edge-line"></i>
+            <span class="wf-edge-arrow h"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><polygon points="0,0 10,5 0,10"/></svg></span>
+            <span class="wf-edge-arrow v"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><polygon points="0,0 10,0 5,10"/></svg></span>
+            <span class="wf-edge-label">E2 N01→N03 实线：长按 1100ms → 自由（绿圆形转场）</span>
+          </div>
+        </div>
+        <div class="wf-node" data-node="N03"><span class="wf-node-id">N03</span>03 AR 主画面</div>
+        <div class="wf-flow-edges">
+          <div class="wf-edge" data-edge="E4">
+            <i class="wf-edge-line"></i>
+            <span class="wf-edge-arrow h"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><polygon points="0,0 10,5 0,10"/></svg></span>
+            <span class="wf-edge-arrow v"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><polygon points="0,0 10,0 5,10"/></svg></span>
+            <span class="wf-edge-label">E4 N03→N04 实线：战斗 → 04 结算（hp 归零，900ms）</span>
+          </div>
+          <div class="wf-edge e-dash" data-edge="E5">
+            <i class="wf-edge-line"></i>
+            <span class="wf-edge-arrow h"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><polygon points="0,0 10,5 0,10"/></svg></span>
+            <span class="wf-edge-arrow v"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><polygon points="0,0 10,0 5,10"/></svg></span>
+            <span class="wf-edge-label">E5 N03→N03 灰虚线自环：自由 → 无结算（循环 03）</span>
+          </div>
+        </div>
+        <div class="wf-node" data-node="N04"><span class="wf-node-id">N04</span>04 结算 · YOU WIN!</div>
+        <div class="wf-flow-edges">
+          <div class="wf-edge e-dash" data-edge="E6">
+            <i class="wf-edge-line"></i>
+            <span class="wf-edge-arrow h"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><polygon points="0,0 10,5 0,10"/></svg></span>
+            <span class="wf-edge-arrow v"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><polygon points="0,0 10,0 5,10"/></svg></span>
+            <span class="wf-edge-label">E6 N04⇢N03 灰虚线回流：再来一局 reset(); goto('ar') · 跳过开场</span>
+          </div>
+          <div class="wf-edge e-dash" data-edge="E7">
+            <i class="wf-edge-line"></i>
+            <span class="wf-edge-arrow h"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><polygon points="0,0 10,5 0,10"/></svg></span>
+            <span class="wf-edge-arrow v"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><polygon points="0,0 10,0 5,10"/></svg></span>
+            <span class="wf-edge-label">E7 N04⇢N01 灰虚线回流：回开场重选外星人 reset(); goto('home')</span>
+          </div>
+        </div>
+        <div class="wf-node wf-node-loop" data-node="N05"><span class="wf-node-id">N05</span>自由 → 无结算（循环 03）</div>
+      </div>
+      <div class="wf-flow-aside">
+        <div class="wf-node wf-node-iso" data-node="N02"><span class="wf-node-id">N02</span>02 选模式 · 演示遗留页<small>产品流程不可达</small></div>
+        <div class="wf-edge e-dash wf-edge-stub" data-edge="E3-stub">
+          <i class="wf-edge-line"></i><span class="wf-edge-label">无产品入口</span>
+        </div>
+        <div class="wf-edge e-dash" data-edge="E3">
+          <i class="wf-edge-line"></i>
+          <span class="wf-edge-arrow h"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><polygon points="0,0 10,5 0,10"/></svg></span>
+          <span class="wf-edge-arrow v"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><polygon points="0,0 10,0 5,10"/></svg></span>
+          <span class="wf-edge-label">E3 N02⇢N03 灰虚线：仅演示控制台 step data-goto=prep 可达；进 AR 按钮 goto('ar')</span>
+        </div>
+      </div>
+    </div>
+
+    <table class="wf-table wf-enum-table">
+      <caption>状态枚举（S0–S10）· 11 行</caption>
+      <thead><tr><th scope="col">状态</th><th scope="col">触发</th><th scope="col">下一状态</th><th scope="col">备注</th></tr></thead>
+      <tbody>
+        <tr><td>S0 开场待机</td><td>初始 / reset(); goto('home')</td><td>S1 / S2</td><td>S.breaks=0；S.mode 保留</td></tr>
+        <tr><td>S1 连点击破 0→5</td><td>凶狠外星人连点 ≤1200ms ×5</td><td>S3 战斗 AR</td><td>超时 resetCombo() 归零；breakFlash + 玫红圆转场</td></tr>
+        <tr><td>S2 长按形变</td><td>友好外星人长按 ≥1100ms</td><td>S3 自由 AR</td><td>松手/离开/取消中断；S.breaks=5 阻止另一路</td></tr>
+        <tr><td>S3 战斗 · 未锁定</td><td>进入 AR（默认）</td><td>S4</td><td>S.locked=false；点画面被 toast 拦截</td></tr>
+        <tr><td>S4 战斗 · 已锁定</td><td>点 #anchorHit / 回车</td><td>S5</td><td>文案变「已锁定 · 人 · 2.4 m · 点画面投掷」</td></tr>
+        <tr><td>S5 战斗 · 投掷/形变</td><td>点画面且 inBox</td><td>S6</td><td>投中 +120/throws++；形变 +60/pokes++；hp−1</td></tr>
+        <tr><td>S6 战斗 · hp 归零</td><td>hp===0</td><td>S7 结算</td><td>S.finished=true；900ms 后 goto('result')</td></tr>
+        <tr><td>S7 结算</td><td>renderResult()</td><td>S3 / S0</td><td>再来一局→S3 跳过开场；回开场→S0；两者 reset() 保留 mode</td></tr>
+        <tr><td>S8 自由 · AR</td><td>开场长按 / AR 顶部切自由</td><td>S8 自环</td><td>不扣血/不计分/不结算；doTap 仅触感；无「结束本局」出口</td></tr>
+        <tr><td>S9 选模式（遗留）</td><td>仅演示控制台 step data-goto=prep</td><td>S3</td><td>产品流程不可达；#btnEnter → goto('ar')</td></tr>
+        <tr><td>S10 皮肤 / 物品栏 / 三视图</td><td>屏内开关</td><td>当前状态</td><td>不改主流程状态；三视图/锁定分段/本机数据由演示控制台驱动，不画入线框</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===== 分组 A 主流程 · 4 屏 ===== -->
+  <section class="wf-group" data-group="A">
+    <h2 class="wf-group-title">A 主流程 · 4 屏</h2>
+    <div class="wf-grid" id="wfGroupA"></div>
+  </section>
+
+  <!-- ===== 分组 B WF-03 状态变体 ===== -->
+  <section class="wf-group" data-group="B">
+    <h2 class="wf-group-title">B WF-03 状态变体</h2>
+    <p class="wf-group-note">同一张卡按状态即时替换：画布填充 / 边框、区域标签文字、索引表状态值、热点清单、状态标签、疑点条同步更新；含 R2 新增两张（WF-03h 老鼠干 + 横滑背包 / WF-03i 替换弹窗）；打印时 9 张变体卡并列展开。</p>
+    <div class="wf-state-switch" role="group" aria-label="WF-03 状态变体" id="wfStateSwitch"></div>
+    <span class="sr-only" aria-live="polite" aria-atomic="true" id="wfLive"></span>
+    <div class="wf-grid" id="wfGroupB"></div>
+  </section>
+
+  <!-- ===== 分组 C 疑点汇总 ===== -->
+  <section class="wf-group" data-group="C">
+    <h2 class="wf-group-title">C 疑点汇总（Q1–Q4）</h2>
+    <p class="wf-group-note">流程状态图与状态枚举见 F-00，此处不重画</p>
+    <table class="wf-table wf-doubt-table">
+      <caption>疑点汇总 Q1–Q4 · 4 行</caption>
+      <thead><tr><th scope="col">编号</th><th scope="col">文字（≤40 字）</th><th scope="col">归属卡片</th><th scope="col">红虚线框坐标</th><th scope="col">侧重 / 扩散说明</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Q1</td>
+          <td>开场已定模式，AR 顶部还能切；转场仅开场有，切模式不重置 hp/score</td>
+          <td>WF-01 / WF-02 / WF-03</td>
+          <td>WF-01 x16,y196,400×200；WF-02 x16,y160,400×340；WF-03 x8,y22,180×56</td>
+          <td>开场 enterMode() 有玫红/绿圆形转场；AR 内 setMode() 只切 class 与文案，不重置 hp/score，无转场；WF-02 遗留页同时提示产品流程不可达。</td>
+        </tr>
+        <tr>
+          <td>Q2</td>
+          <td>自由文案说无门槛，实际 doTap 仍要求先锁定锚框，否则弹提示</td>
+          <td>WF-03a / WF-03d</td>
+          <td>WF-03a x112,y176,208×356；WF-03d x112,y176,208×356</td>
+          <td>「点哪糊哪、无门槛」与 S.locked 前置冲突：未锁定点画面直接 return 并 toast「先点墨框锁定，才能糊它」；战斗与自由态同样受影响。</td>
+        </tr>
+        <tr>
+          <td>Q3</td>
+          <td>再来一局跳过开场直接回 AR；自由模式不进结算，也无「结束本局」出口</td>
+          <td>WF-04</td>
+          <td>WF-04 x20,y660,392×96</td>
+          <td>reset(); goto('ar') 保留 S.mode 并跳过开场；自由模式 hp 不减、不触发 S.finished，没有主动结束本局的路径，只能循环 03。</td>
+        </tr>
+        <tr>
+          <td>Q4</td>
+          <td>hp 清零即结算，标题固定 YOU WIN!，没有失败 / 超时分支</td>
+          <td>WF-04 / WF-03g</td>
+          <td>WF-04 x10,y56,240×90；WF-03g x16,y100,400×40</td>
+          <td>hp===0 即 S.finished=true，900ms 后 goto('result')；renderResult() 固定 YOU WIN!，无失败、超时、平局或重试分支。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===== 页脚 ===== -->
+  <footer class="wf-foot">
+    <p>本线框墙逻辑来源：E:/Earth OL/ui-simulator/inkplay.html。右侧演示控制台（分镜步骤 / 图层三视图 / 锁定分段 / 本机数据 / 重置一局）为逻辑来源，不画入线框；顶栏、左信息栏、设备外壳与 sr-only 播报区同样不画入。</p>
+    <p>唯一逻辑画布 432×768，展示层以 --wf-scale 缩放（桌面 .62），画布内坐标直接沿用产品 px。流程主线按 开场 → AR → 结算 三段；第 02 屏为演示遗留页 · 产品流程不可达。</p>
+    <p>忠实还原代码现状：红字疑点条只标注矛盾、不修正逻辑；模式采用色 + 文字 + 形状三重编码；支持键盘操作、减少动效偏好与打印展开。</p>
+    <p>R2：全站固定 432×768（9:16）单一比例 --wf-scale:.62；画布内长文案外移至索引表、角标改独立窄条；新增 WF-03h / WF-03i 描述实现后的目标状态（非遗留疑点）。Q1–Q4 与 F-00 流程保持不变。</p>
+  </footer>
+</div>
+
+<script>
+/* ============================================================
+   EARTH OL · UI 逻辑线框墙
+   数据驱动：CARDS（4 主屏基准）+ VARIANTS（10 状态）+ 单一 renderCard
+   逻辑来源 inkplay.html（S 状态机 / COMBO_MS 1200 / SQUASH_MS 1100 /
+   enterMode 300ms+660ms / setMode / setLock / doTap / 900ms 结算 / 滑屏阈值）
+   ============================================================ */
+
+var QTEXT = {
+  Q1:"开场已定模式，AR 顶部还能切；转场仅开场有，切模式不重置 hp/score",
+  Q2:"自由文案说无门槛，实际 doTap 仍要求先锁定锚框，否则弹提示",
+  Q3:"再来一局跳过开场直接回 AR；自由模式不进结算，也无「结束本局」出口",
+  Q4:"hp 清零即结算，标题固定 YOU WIN!，没有失败 / 超时分支"
+};
+
+/* ---- 通用小工具 ---- */
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function esc(s){
+  return String(s == null ? "" : s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+function ln(l){
+  if(typeof l === "string") return '<span class="wf-ln">'+esc(l)+'</span>';
+  return '<span class="wf-ln '+(l.s||"")+'">'+esc(l.t)+'</span>';
+}
+function linesHtml(a){ return (a||[]).map(ln).join(""); }
+
+/* ---- 画布内文字硬约束：按盒高限行数、按盒宽限字数，超出缩为省略号 ----
+   完整文案一律外移到索引表 state 列 / indexNote / 热点清单（画布外）。 */
+function maxLines(h){ return h < 40 ? 0 : (h < 62 ? 1 : 2); }
+function lineCap(w){ return Math.max(1, Math.floor((w - 12) / 18)); }
+function fitLines(arr, w, h){
+  var n = maxLines(h), cap = Math.min(12, lineCap(w)), out = [];
+  (arr || []).forEach(function(l){
+    if(out.length >= n) return;
+    var txt = (typeof l === "string") ? String(l) : String(l.t);
+    var cls = (typeof l === "string") ? "" : (l.s || "");
+    if(txt.length > cap) txt = txt.slice(0, Math.max(1, cap - 1)) + "…";
+    out.push({t:txt, s:cls});
+  });
+  return out;
+}
+
+/* ---- 卡片基准数据 ---- */
+var WF01 = {
+  id:"WF-01", name:"双外星人开场", tags:["默认","0/5"],
+  desc:"用两种手势挑一条进场路线：连点 5 下击破封印进战斗，或长按 1.1 秒揉开形变进自由，挑一个直接进 AR。任一完成即互斥。01 格 / GRID 01",
+  regions:[
+    {id:"A1",tag:"A1",label:"A1 顶部页签贴纸",box:[16,16,150,28],fill:"solid",type:"box",
+      lines:["课间 3 分钟"],state:"显示 · 贴纸「课间 3 分钟」/「第 01 格 · 进场」"},
+    {id:"A2",tag:"A2",label:"A2 左凶狠外星人",box:[20,208,132,180],fill:"hatch",accent:"attack",shape:"sharp",type:"box",
+      lines:[{t:"▲ 战斗 · ATTACK",s:"atk"}],state:"斜线占位 + 2px 玫红左竖条 + 尖角外形"},
+    {id:"A3",tag:"A3",label:"A3 中间地球封印",box:[146,208,140,180],fill:"hatch",type:"box",
+      lines:["地球封印",{t:"EARTH OL / INKPLAY",s:"tiny"}],state:"斜线占位 · 连点目标；画布内文案「EARTH OL / INKPLAY」"},
+    {id:"A4",tag:"A4",label:"A4 右友好外星人",box:[280,208,132,180],fill:"hatch",accent:"free",shape:"round",type:"box",
+      lines:[{t:"● 自由 · FREE",s:"free"}],state:"斜线占位 + 2px 绿左竖条 + 圆润外形"},
+    {id:"A5",tag:"A5",label:"A5 5 段封印血条",box:[28,512,376,22],fill:"text",type:"hp",
+      meta:{segs:5,off:0},lines:[],state:"5 段封印血条 · 击破 0/5；5 段实心（gap 8），击破后前 N 段变虚线无填充；画布内只画段块"},
+    {id:"A6",tag:"A6",label:"A6 连击贴纸",box:[20,188,96,32],fill:"dashed",type:"box",
+      lines:["连击 ×0"],state:"默认虚线隐藏（连击 ×0）；连点后实心显示「连击 ×N」"},
+    {id:"A7",tag:"A7",label:"A7 路线提示",box:[24,552,384,96],fill:"solid",type:"box",
+      lines:[{t:"连点 5 下 / 1200ms"},{t:"长按 1 秒 / 1100ms"},{t:"左边连点 · 右边长按",s:"tiny"}],
+      state:"显示 · 双路线文案与两个时限（1200ms / 1100ms），画布内缩写为「左边连点 · 右边长按」"},
+    {id:"A8",tag:"A8",label:"A8 底部出口",box:[24,700,384,40],fill:"text",type:"box",
+      lines:["挑一个外星人 · 进入 EARTH OL",{t:"玫红圆形转场 / 绿圆形转场",s:"tiny"}],
+      state:"仅文字「挑一个外星人 · 进入 EARTH OL」+ 玫红圆形转场 / 绿圆形转场 出口标记"}
+  ],
+  hotspots:[
+    {id:"H1",x:36,y:236,shape:"tap"},{id:"H2",x:392,y:236,shape:"hold"},
+    {id:"H3",x:96,y:492,shape:"tap"},{id:"H4",x:216,y:470,shape:"block"},
+    {id:"H5",x:344,y:708,shape:"key"}
+  ],
+  leaders:[
+    {id:"L1",pts:[[86,388],[86,504],[216,504]],label:"L1",at:[92,498]},
+    {id:"L2",pts:[[346,388],[346,690],[216,690]],label:"L2",at:[352,684]},
+    {id:"L3",pts:[[216,552],[216,240],[68,240],[68,220]],label:"L3",at:[224,246]}
+  ],
+  doubts:[{id:"Q1",box:[16,196,400,200]}],
+  strips:[],
+  indexNote:"顶栏/左信息栏/右演示控制台/设备外壳/sr-only 播报区不画入；三视图、分镜步骤、锁定分段、本机数据、重置一局均为控制台逻辑来源。A7 完整路线文案：左边连点 击破封印进战斗（停手会断）　·　右边长按 揉开形变进自由。卡头副标题含「01 格 / GRID 01」。",
+  hotspotList:[
+    "H1 连点×5（≤1200ms） → 熄灭 5 段血条 + 连击 ×N + 玫红圆转场进战斗 AR",
+    "H2 长按 1100ms → 形变 + S.breaks=5 互斥 + 绿圆转场进自由 AR",
+    "H3 间隔 >1200ms → 连击归零、血条全亮（连击中断，归零）",
+    "H4 任一完成 → 另一路线被阻止（S.breaks=5）",
+    "H5 enterMode() → 300ms setMode+goto('ar')，660ms 淡出；REDUCE 跳过动效"
+  ],
+  doubtBars:[{q:"Q1"}]
+};
+
+var WF02 = {
+  id:"WF-02", name:"选模式 · 演示遗留页", tags:["默认","战斗"],
+  desc:"两张模式卡 +『AR 左上角随时能换，不用回来重选』说明 +『进 AR』按钮，供对照模式来源。",
+  legacy:"演示遗留页 · 产品流程不可达",
+  regions:[
+    {id:"A1",tag:"A1",label:"A1 顶部横幅",box:[16,16,400,40],fill:"solid",type:"box",
+      lines:[],state:"实心横幅；「第 02 格 · 选模式」+ 红字「演示遗留页 · 产品流程不可达」均在画布外（卡内 legacy 行），画布内只留角标 A1"},
+    {id:"A2",tag:"A2",label:"A2 标题 / 副文",box:[16,72,384,80],fill:"solid",type:"box",
+      lines:["挑个模式",{t:"选的不是难度，是这节课想怎么放松。进 AR 之后还能随时切。",s:"tiny"}],
+      state:"显示 · 标题「挑个模式」；完整副文「选的不是难度，是这节课想怎么放松。进 AR 之后还能随时切。」"},
+    {id:"A3",tag:"A3",label:"A3 战斗模式卡（选中）",box:[20,168,392,152],fill:"active",accent:"attack",shape:"sharp",type:"box",
+      lines:[{t:"▲ 战",s:"atk"},"战斗模式",{t:"锁住镜头里的人，投中扣血计分，打完出结算。",s:"tiny"}],
+      state:"深实心（选中）+ 2px 玫红边 + 尖角形；含「有血条 · 有结算」"},
+    {id:"A4",tag:"A4",label:"A4 自由模式卡",box:[28,332,392,152],fill:"solid",accent:"free",shape:"round",type:"box",
+      lines:[{t:"● 放",s:"free"},"自由模式",{t:"点哪糊哪，不扣血不计分，把一节课的压力揉掉就行。",s:"tiny"}],
+      state:"实心浅灰 + 2px 绿边 + 圆润形；含「无血条 · 无结算」"},
+    {id:"A5",tag:"A5",label:"A5 说明条",box:[24,500,384,32],fill:"solid",type:"box",
+      lines:["AR 左上角随时能换，不用回来重选"],state:"显示 · 说明条「AR 左上角随时能换，不用回来重选」"},
+    {id:"A6",tag:"A6",label:"A6 底部细线列表占位",box:[24,596,384,64],fill:"hatch",type:"hair",
+      lines:[],state:"斜线占位 · 8 行细线，不承载信息层"},
+    {id:"A7",tag:"A7",label:"A7 CTA 进 AR",box:[24,664,384,62],fill:"solid",type:"box",
+      lines:[{t:"进 AR ▶",s:"title"}],state:"实心 + 2px 主线"},
+    {id:"A8",tag:"A8",label:"A8 备注",box:[24,734,384,24],fill:"text",type:"box",
+      lines:[{t:"选中的模式决定 HUD 长什么样",s:"tiny"}],state:"仅文字「选中的模式决定 HUD 长什么样」"}
+  ],
+  hotspots:[
+    {id:"H1",x:44,y:182,shape:"tap"},{id:"H2",x:52,y:346,shape:"tap"},
+    {id:"H3",x:216,y:676,shape:"tap"},{id:"H4",x:404,y:28,shape:"block"}
+  ],
+  leaders:[
+    {id:"L1",pts:[[216,320],[216,336],[216,664]],label:"L1",at:[224,650]},
+    {id:"L2",pts:[[408,516],[424,516],[424,72]],label:"L2",at:[332,66]},
+    {id:"L3",pts:[[404,28],[420,28],[420,16]],label:"L3",at:[352,12]}
+  ],
+  doubts:[{id:"Q1",box:[16,160,400,340]}],
+  strips:[],
+  indexNote:"开场到此屏无产品入口，仅演示控制台 step data-goto=\"prep\" 可达；演示遗留页 · 产品流程不可达。画布外完整文案：第 02 格 · 选模式 / 选的不是难度，是这节课想怎么放松。进 AR 之后还能随时切。/ 有血条 · 有结算 / 无血条 · 无结算 / AR 左上角随时能换，不用回来重选 / 选中的模式决定 HUD 长什么样。",
+  hotspotList:[
+    "H1 点战斗卡 → setMode('attack')",
+    "H2 点自由卡 → setMode('free')",
+    "H3 点「进 AR」→ goto('ar')",
+    "H4 不可达（空心圆 + 斜杠）→ 开场到此屏无入口，仅演示控制台 step data-goto=\"prep\" 可达；演示遗留页 · 产品流程不可达"
+  ],
+  doubtBars:[{q:"Q1"}]
+};
+
+var WF03 = {
+  id:"WF-03", name:"AR 主画面", tags:["默认","战斗"],
+  desc:"实景满铺、锚框居中，顶部常驻模式切换；战斗态显示血条与分数，点画面投掷/形变前必须先锁定锚框。",
+  regions:[
+    {id:"A1",tag:"A1",label:"A1 顶部模式切换",box:[16,30,180,56],fill:"text",type:"mode",
+      meta:{mode:"attack",flag:"战斗 · 计分"},
+      state:"战斗按钮深实心 + 玫红边 + 尖角；自由按钮虚线未选 + 绿边 + 圆润；modeFlag「战斗 · 计分」"},
+    {id:"A2",tag:"A2",label:"A2 战斗血条（hp 5/5）",box:[16,100,400,24],fill:"solid",type:"hp",
+      meta:{segs:5,off:0},lines:[],state:"显示 · 5 段深实心 · 对手 · hp 5/5；画布内只画段块，文案外移"},
+    {id:"A3",tag:"A3",label:"A3 右上分数",box:[336,72,80,36],fill:"solid",type:"box",
+      lines:[{t:"0",s:"title"}],state:"显示 · score 0（单个数字 0）"},
+    {id:"A4",tag:"A4",label:"A4 实景层",box:[0,100,432,520],fill:"hatch",type:"reality",z:0,
+      meta:{swipe:false},lines:["AR 实景 432×768"],state:"静态实景 · 45° 斜线占位 · 满铺；z:0 满铺背景不画角标，仅在索引表标注"},
+    {id:"A5",tag:"A5",label:"A5 锚定框",box:[121,210,190,310],fill:"dashed",type:"anchor",
+      meta:{locked:false},lines:["识别到 1 个人","点框锁定"],
+      state:"未锁定 · 待点击 · 虚线无填充 + 四角 8px 直角标记；完整文案「识别到 1 个人 · 点框锁定」「锚定框 190×310」"},
+    {id:"A6",tag:"A6",label:"A6 底部 Dock（收起）",box:[14,620,404,148],fill:"text",type:"dock",
+      meta:{open:false,selected:null},lines:["物品 ▼"],
+      state:"收起 / selected=null · 手柄 64×28 · 4 张 94×56 卡虚线无填充"},
+    {id:"A7",tag:"A7",label:"A7 皮肤区（隐藏）",box:[14,490,404,40],fill:"text",type:"skins",
+      meta:{btn:false,panel:false,idx:1},lines:[],
+      state:"隐藏 · 皮肤按钮(right16,y30,64×32)与浮层(14,490,404,40)全部虚线隐藏"},
+    {id:"A8",tag:"A8",label:"A8 反馈层",box:[60,540,312,40],fill:"dashed",type:"box",
+      lines:[{t:"（虚线隐藏）",s:"tiny"}],state:"虚线隐藏 · toast / +120 / +60 落点"}
+  ],
+  hotspots:[
+    {id:"H1",x:130,y:224,shape:"tap"},{id:"H2",x:296,y:418,shape:"tap"},
+    {id:"H3",x:24,y:36,shape:"tap"},{id:"H4",x:24,y:628,shape:"tap"},
+    {id:"H5",x:356,y:36,shape:"tap"},{id:"H6",x:216,y:300,shape:"swipe"}
+  ],
+  leaders:[
+    {id:"L1",pts:[[106,86],[106,96]],label:"L1 A1→A2/A3",at:[110,92]},
+    {id:"L2",pts:[[216,520],[216,540]],label:"L2 A5→A8",at:[220,536]},
+    {id:"L3",pts:[[216,620],[216,600]],label:"L3 A6→A4",at:[220,606]}
+  ],
+  doubts:[{id:"Q1",box:[8,22,180,56]}],
+  strips:[],
+  indexNote:"默认态：战斗 / 未锁定 / Dock 收起 / hp 5/5 / score 0 / 皮肤隐藏 / 合成视图；三视图、锁定分段、本机数据由演示控制台驱动，不画入线框。",
+  hotspotList:[
+    "H1 点锚框 → setLock(true)，虚线→实线、文案变「已锁定 · 人 · 2.4 m · 点画面投掷」+ toast「锁住了，点画面糊它」",
+    "H2 点画面 → doTap，前置 S.locked=true，否则 toast「先点墨框锁定，才能糊它」；框内投中 +120/throws++ 或形变 +60/pokes++、hp−1；框外仅墨点 +「没糊到，往墨框里点」；自由态只给触感不计分/不扣血/不结算",
+    "H3 点模式切换 → setMode() 只切 class 与文案，不重置 hp/score，AR 内无粉/绿转场",
+    "H4 展开/收起 Dock → 4 卡，选中=投掷、全不选=形变、再点取消",
+    "H5 点皮肤（仅自由）→ 4 色板展开，默认电光绿",
+    "H6 左右滑屏（仅自由）→ |dx|>44 且 >|dy|+8 → setSkin(±1) + toast「皮肤：X」"
+  ],
+  doubtBars:[{q:"Q1"}]
+};
+
+var WF04 = {
+  id:"WF-04", name:"本机结算", tags:["默认","结算"],
+  desc:"hp 归零 900ms 后进入，固定标题 YOU WIN!，报得分 / 投中 / 形变三条数据；两个 CTA 决定下一局去向。",
+  regions:[
+    {id:"A1",tag:"A1",label:"A1 页签贴纸",box:[24,26,150,28],fill:"solid",type:"box",
+      lines:["第 04 格 · 结算"],state:"显示 · 贴纸「第 04 格 · 结算」"},
+    {id:"A2",tag:"A2",label:"A2 标题 YOU WIN!",box:[10,64,240,80],fill:"solid",type:"box",
+      lines:[{t:"YOU WIN!",s:"title"}],state:"实心 + 2px 主线 · 24px/700 纯文字，固定文案「YOU WIN!」"},
+    {id:"A3",tag:"A3",label:"A3 副文",box:[22,182,388,44],fill:"solid",type:"box",
+      lines:["你投中 0 次、揉了 0 下，把它糊成了一摊。"],state:"显示 · renderResult() 按 throws / pokes 填数；完整副文「你投中 0 次、揉了 0 下，把它糊成了一摊。」"},
+    {id:"A4",tag:"A4",label:"A4 得分条",box:[26,248,380,76],fill:"solid",type:"box",
+      lines:["得分",{t:"SCORE",s:"mono"},{t:"0",s:"title"}],state:"显示 · 得分 / SCORE / 0"},
+    {id:"A5",tag:"A5",label:"A5 投中条",box:[26,336,380,76],fill:"solid",type:"box",
+      lines:["投中","投掷命中次数",{t:"0",s:"title"}],state:"显示 · 投中 / 投掷命中次数 / 0"},
+    {id:"A6",tag:"A6",label:"A6 形变条",box:[26,424,380,76],fill:"solid",type:"box",
+      lines:["形变","揉捏触发次数",{t:"0",s:"title"}],state:"显示 · 形变 / 揉捏触发次数 / 0"},
+    {id:"A7",tag:"A7",label:"A7 圆形徽标",box:[314,520,96,96],fill:"solid",shape:"circle",type:"box",
+      lines:["本机","单局","成绩"],state:"实心 + 2px 圆形线"},
+    {id:"A8",tag:"A8",label:"A8 底部 CTA 区",box:[24,680,384,62],fill:"solid",type:"box",
+      lines:[{t:"再来一局 ▶",s:"title"}],state:"主按钮实心 + 2px 主线「再来一局 ▶」；次链接「回开场重选外星人」仅文字，见热点清单 H2"}
+  ],
+  hotspots:[
+    {id:"H1",x:40,y:694,shape:"tap"},{id:"H2",x:40,y:750,shape:"tap"},
+    {id:"H3",x:130,y:90,shape:"key"},{id:"H4",x:350,y:90,shape:"block"}
+  ],
+  leaders:[
+    {id:"L1",pts:[[130,144],[130,248]],label:"L1 A2→A4/A5/A6",at:[134,240]},
+    {id:"L2",pts:[[408,710],[424,710],[424,660]],label:"L2 → F-00 回流 03",at:[300,654]},
+    {id:"L3",pts:[[24,750],[8,750],[8,690]],label:"L3 → F-00 回流 01",at:[12,682]}
+  ],
+  doubts:[{id:"Q3",box:[20,660,392,96]},{id:"Q4",box:[10,56,240,90]}],
+  strips:[],
+  indexNote:"仅战斗模式 hp===0 进入；自由模式不进结算，也没有「结束本局」出口。画布外完整文案：第 04 格 · 结算 / 你投中 0 次、揉了 0 下，把它糊成了一摊。/ 得分 SCORE 0 / 投中 投掷命中次数 0 / 形变 揉捏触发次数 0 / 本机 单局 成绩 / 回开场重选外星人。",
+  hotspotList:[
+    "H1「再来一局」→ reset(); goto('ar')（跳过开场、保留 S.mode、无转场）",
+    "H2「回开场重选外星人」→ reset(); goto('home')",
+    "H3 自动 hp===0 → S.finished=true，900ms 后 goto('result')",
+    "H4 负向：自由模式不进结算，也无「结束本局」出口"
+  ],
+  doubtBars:[{q:"Q3"},{q:"Q4"}]
+};
+
+var CARDS = [WF01, WF02, WF03, WF04];
+
+/* ---- 区域内部构件渲染 ---- */
+function innerHtml(r){
+  var m = r.meta || {};
+  var t = r.type || "box";
+  if(t === "hp"){
+    var n = m.segs == null ? 5 : m.segs, off = m.off || 0, segs = "";
+    for(var i=0;i<n;i++) segs += '<i class="wf-seg'+(i>=n-off?' off':'')+'"></i>';
+    return '<div class="wf-segs">'+segs+'</div>';
+  }
+  if(t === "dock"){
+    var names = ["箭矢","大脑","果冻","粘粘手"];
+    if(m.hscroll){
+      var cards = "";
+      for(var c=0;c<4;c++) cards += '<span class="wf-bag-card">'+names[c]+'</span>';
+      var rat = m.ratSlot || "empty";
+      var ratInner;
+      if(rat === "filled") ratInner = '<span class="wf-bag-x">✕</span><span class="wf-rat-mini wf-hatch"></span><span class="wf-ln">1/1</span>';
+      else if(rat === "locked") ratInner = '<span class="wf-ln">仅自由</span><span class="wf-ln">×</span>';
+      else ratInner = '<span class="wf-ln">0/1</span><span class="wf-ln">拖出</span>';
+      var ticks = "";
+      for(var q=0;q<5;q++) ticks += '<i class="wf-bag-tick"></i>';
+      return '<div class="wf-bag">'
+        + '<div class="wf-bag-handle"><span>背包 ▼</span><span class="wf-bag-count">'+(rat === "filled" ? "0/1 → 1/1" : "0/1")+'</span><span class="wf-bag-chip">'+(rat === "filled" ? "1/1" : "0/1")+'</span></div>'
+        + '<div class="wf-bag-row"><span class="wf-bag-nav">‹</span><div class="wf-bag-track">'
+        + cards + '<span class="wf-bag-rat '+rat+'">'+ratInner+'</span>'
+        + '</div><span class="wf-bag-nav">▶</span></div>'
+        + '<div class="wf-bag-axis">'+ticks+'</div>'
+        + '</div>';
+    }
+    var items = "";
+    for(var j=0;j<4;j++){
+      var c2 = "wf-item";
+      if(m.open) c2 += " open";
+      if(m.selected && m.selected === names[j]) c2 += " sel";
+      items += '<span class="'+c2+'">'+names[j]+'</span>';
+    }
+    return '<span class="wf-dock-handle">物品 '+(m.open?"▲":"▼")+'</span><div class="wf-dock-items">'+items+'</div>';
+  }
+  if(t === "rat"){
+    return '<div class="wf-rat"><span class="wf-rat-figure wf-hatch"></span><span class="wf-ln">老鼠干</span><span class="wf-rat-chip">1/1</span><span class="wf-rat-remove">✕</span></div>';
+  }
+  if(t === "modal"){
+    return '<div class="wf-modal">'
+      + '<span class="wf-modal-title">换掉？</span>'
+      + '<div class="wf-modal-compare">'
+      + '<div class="wf-modal-box"><span class="wf-modal-figure wf-hatch"></span><span class="wf-ln">旧的</span></div>'
+      + '<span class="wf-modal-arrow">→</span>'
+      + '<div class="wf-modal-box"><span class="wf-modal-figure wf-hatch"></span><span class="wf-ln">新的</span></div>'
+      + '</div>'
+      + '<div class="wf-modal-actions"><span class="wf-modal-btn secondary">取消</span><span class="wf-modal-btn primary">替换</span></div>'
+      + '<span class="wf-bag-chip">1/1</span>'
+      + '</div>';
+  }
+  if(t === "skins"){
+    var sk = ["荧光粉","电光绿","橘子橙","柠檬黄"], sw = "";
+    for(var k=0;k<4;k++){
+      var sc = "wf-swatch";
+      if(m.panel) sc += " filled";
+      if(k === (m.idx == null ? 1 : m.idx)) sc += " cur";
+      sw += '<span class="'+sc+'">'+sk[k]+'</span>';
+    }
+    var dot = (m.idx === 2) ? '<i class="wf-skin-dot orange"></i>' : '<i class="wf-skin-dot"></i>';
+    var btn = '<span class="wf-skin-btn'+(m.btn?' show':'')+'">'+dot+'皮肤</span>';
+    var panel = '<span class="wf-skin-panel'+(m.panel?' open':'')+'"><span class="wf-skin-nav">◀</span><span class="wf-swatches">'+sw+'</span><span class="wf-skin-nav">▶</span></span>';
+    return btn + panel;
+  }
+  if(t === "anchor"){
+    var corners = '<i class="wf-corner c1"></i><i class="wf-corner c2"></i><i class="wf-corner c3"></i><i class="wf-corner c4"></i>';
+    var chk = m.locked ? '<span class="wf-check">✓</span>' : '';
+    return corners + chk + '<span class="wf-anchor-tag">'+linesHtml(r.lines)+'</span>';
+  }
+  if(t === "mode"){
+    var atkCls = "wf-mode-btn atk", freeCls = "wf-mode-btn free";
+    if(m.mode === "free"){ atkCls += " light"; freeCls += " on"; }
+    else { atkCls += " on"; }
+    return '<div class="wf-mode-row"><span class="'+atkCls+'">▲ 战斗</span><span class="'+freeCls+'">● 自由</span></div>'
+      + '<span class="wf-mode-flag">'+esc(m.flag)+'</span>';
+  }
+  if(t === "hair"){
+    var hair = "";
+    for(var hh=0;hh<8;hh++) hair += '<i class="wf-hair"></i>';
+    return hair;
+  }
+  if(t === "reality"){
+    return '<span class="wf-ln mono">'+linesHtml(r.lines)+'</span>' + (m.swipe ? '<span class="wf-ln tiny">滑屏</span>' : '');
+  }
+  return linesHtml(r.lines);
+}
+
+function regionHtml(r){
+  var b = r.box || [0,0,0,0];
+  var f = r.fill || "text";
+  var boxCls = "wf-region-box fill-"+f;
+  if(f === "solid") boxCls = "wf-region-box fill-solid wf-solid";
+  if(f === "active") boxCls = "wf-region-box fill-active wf-active";
+  if(f === "hatch") boxCls = "wf-region-box fill-hatch wf-hatch";
+  if(f === "dashed") boxCls = "wf-region-box fill-dashed wf-dashed";
+  if(r.accent) boxCls += " accent-"+r.accent;
+  if(r.shape) boxCls += " shape-"+r.shape;
+  var rr = Object.assign({}, r, {lines: fitLines(r.lines, b[2], b[3])});
+  return '<div class="wf-region" data-region="'+esc(r.id)+'" aria-hidden="true" style="left:'+b[0]+'px;top:'+b[1]+'px;width:'+b[2]+'px;height:'+b[3]+'px;z-index:'+(r.z == null ? 1 : r.z)+'">'
+    + '<div class="'+boxCls+'">'+innerHtml(rr)+'</div>'
+    + '</div>';
+}
+
+/* 独立角标层：.wf-canvas 直属子节点 z-index 7；只写短 ID；z:0 满铺背景不画角标 */
+function tagsLayerHtml(regions){
+  var s = '<div class="wf-tags-layer" aria-hidden="true">';
+  (regions || []).forEach(function(r){
+    if(r.z === 0) return;
+    var b = r.box || [0,0,0,0];
+    s += '<span class="wf-region-tag" data-tag-for="'+esc(r.id)+'" style="left:'+(b[0]+4)+'px;top:'+(b[1]+2)+'px">'+esc(r.id)+'</span>';
+  });
+  return s + '</div>';
+}
+
+function hotspotHtml(h){
+  var numW = 26;
+  var nx = (h.x + 18 + numW > 416) ? h.x - 18 - numW : h.x + 18;
+  return '<span class="wf-hotspot sh-'+esc(h.shape||"tap")+'" data-hotspot="'+esc(h.id)+'" aria-hidden="true" style="left:'+h.x+'px;top:'+h.y+'px"></span>'
+    + '<span class="wf-hotspot-num" aria-hidden="true" style="left:'+nx+'px;top:'+(h.y-2)+'px">'+esc(h.id)+'</span>';
+}
+
+function leaderHtml(l){
+  var pts = l.pts.map(function(p){ return p[0]+","+p[1]; }).join(" ");
+  var a = l.pts[0], z = l.pts[l.pts.length-1];
+  var s = '<svg class="wf-leader" data-leader="'+esc(l.id)+'" viewBox="0 0 432 768" aria-hidden="true">';
+  s += '<polyline points="'+pts+'"/>';
+  s += '<circle cx="'+a[0]+'" cy="'+a[1]+'" r="1.5"/>';
+  s += '<circle cx="'+z[0]+'" cy="'+z[1]+'" r="1.5"/>';
+  if(l.label) s += '<text x="'+l.at[0]+'" y="'+l.at[1]+'" class="wf-leader-lbl">'+esc(l.label)+'</text>';
+  return s + '</svg>';
+}
+
+/* 引线标签避让：与任一区域盒（外扩 4px）相交则先缩为短 ID、再移到空白走廊，仍冲突则只留折线 */
+var CORRIDORS = [[4,4],[160,4],[300,4],[4,604],[160,604],[300,604],[4,620],[300,620]];
+function hitsRegion(p, regions, txt){
+  var w = Math.max(24, String(txt).length * 18);
+  var x = p[0], y = p[1] - 18, h = 22;
+  return (regions || []).some(function(r){
+    var b = r.box || [0,0,0,0];
+    return x < b[0]+b[2]+4 && x+w > b[0]-4 && y < b[1]+b[3]+4 && y+h > b[1]-4;
+  });
+}
+function fitLeaders(leaders, regions){
+  return (leaders || []).map(function(l){
+    var o = Object.assign({}, l);
+    if(!o.label) return o;
+    if(!hitsRegion(o.at, regions, o.label)) return o;
+    o.label = o.id;
+    if(!hitsRegion(o.at, regions, o.label)) return o;
+    for(var i=0;i<CORRIDORS.length;i++){
+      if(!hitsRegion(CORRIDORS[i], regions, o.label)){ o.at = CORRIDORS[i]; return o; }
+    }
+    o.label = "";
+    return o;
+  });
+}
+
+function doubtBoxHtml(d){
+  var b = (d.box || [8,8,100,40]).slice();
+  var w = Math.min(b[2], 416), h = Math.min(b[3], 752);
+  var x = Math.max(8, Math.min(b[0], 424 - w));
+  var y = Math.max(8, Math.min(b[1], 760 - h));
+  return '<div class="wf-doubt-box" data-doubt="'+esc(d.id)+'" aria-hidden="true" style="left:'+x+'px;top:'+y+'px;width:'+w+'px;height:'+h+'px">'
+    + '<span class="wf-doubt-badge">?</span></div>';
+}
+
+function stripHtml(s){
+  var b = s.box;
+  var cls = 'wf-strip' + (s.dashed ? ' wf-strip-dashed' : '') + (s.cls ? ' '+s.cls : '');
+  var z = s.z == null ? 3 : s.z;
+  var body = s.tag ? '<span class="wf-safe-tag">'+esc(s.tag)+'</span>' : '';
+  body += linesHtml(fitLines(s.lines, b[2], b[3]));
+  return '<div class="'+cls+'" style="left:'+b[0]+'px;top:'+b[1]+'px;width:'+b[2]+'px;height:'+b[3]+'px;z-index:'+z+'">'+body+'</div>';
+}
+
+/* ---- 基准 + diff 合并：按 id 覆盖区域 / 引线 / 热点清单 ---- */
+function mergeCard(base, diff){
+  var d = clone(base);
+  if(!diff) return d;
+  if(diff.regions){
+    Object.keys(diff.regions).forEach(function(id){
+      var patch = diff.regions[id], hit = false;
+      d.regions = d.regions.map(function(r){
+        if(r.id === id){ hit = true; return Object.assign({}, r, patch); }
+        return r;
+      });
+      if(!hit) d.regions.push(Object.assign({id:id}, patch));
+    });
+  }
+  if(diff.leaders){
+    Object.keys(diff.leaders).forEach(function(id){
+      d.leaders = d.leaders.map(function(l){ return l.id === id ? Object.assign({}, l, diff.leaders[id]) : l; });
+    });
+  }
+  if(diff.hotspots){
+    Object.keys(diff.hotspots).forEach(function(id){
+      var txt = diff.hotspots[id], hit = false;
+      d.hotspotList = d.hotspotList.map(function(s){
+        if(s.indexOf(id+" ") === 0){ hit = true; return txt; }
+        return s;
+      });
+      if(!hit) d.hotspotList.push(txt);
+    });
+  }
+  var skip = {regions:1, leaders:1, hotspots:1};
+  Object.keys(diff).forEach(function(k){
+    if(skip[k]) return;
+    if(k === "indexAdd"){ d.indexExtra = (d.indexExtra || []).concat(clone(diff[k])); }
+    else if(k === "hotspotAdd"){ d.hotspotExtra = (d.hotspotExtra || []).concat(clone(diff[k])); }
+    else if(k === "dots"){ d.hotspots = clone(diff[k]); }
+    else if(k === "leaderList"){ d.leaders = clone(diff[k]); }
+    else d[k] = clone(diff[k]);
+  });
+  return d;
+}
+
+/* ---- 单一渲染器：所有卡片（主屏 / 可切换 / 打印变体）都走这里 ---- */
+function renderCard(data, variant){
+  var d = mergeCard(data, variant);
+  var h = '';
+  var bm = String(d.id).match(/(\d{2})/);
+  var badge = d.badge || (bm ? bm[1] : "03");
+
+  h += '<article class="wf-card" data-card="'+esc(d.id)+'">';
+
+  /* 1 卡头 */
+  h += '<div class="wf-card-head">'
+    + '<span class="wf-card-id">'+esc(badge)+'</span>'
+    + '<span class="wf-card-name">'+esc(d.name)+'</span>'
+    + '<span class="wf-card-tags">'+(d.tags||[]).map(function(t){ return '<span class="wf-tag">['+esc(t)+']</span>'; }).join("")+'</span>'
+    + '</div>';
+
+  /* 2 副说明 */
+  h += '<p class="wf-card-desc">'+esc(d.desc)+'</p>';
+  if(d.legacy) h += '<div class="wf-legacy-inline">'+esc(d.legacy)+'</div>';
+
+  /* 3 画布：region → 独立角标层 → hotspot → leader → doubt-box → strip
+     z 分层（.wf-canvas 直属子节点）：0 实景 / 1 区域块 / 3 带状标注 / 4 引线 /
+     5 疑点框 / 6 热点 / 7 角标 / 8 疑点徽标 */
+  h += '<div class="wf-canvas-slot wf-slot"'+(d.canvasId ? ' id="'+esc(d.canvasId)+'"' : '')
+    + ' role="img" aria-label="'+esc(d.name)+' 432×768 线框示意，详见下方区域索引表与热点清单">';
+  h += '<div class="wf-canvas" aria-hidden="true">';
+  (d.regions||[]).forEach(function(r){ h += regionHtml(r); });
+  h += tagsLayerHtml(d.regions);
+  (d.hotspots||[]).forEach(function(x){ h += hotspotHtml(x); });
+  fitLeaders(d.leaders, d.regions).forEach(function(l){ h += leaderHtml(l); });
+  (d.doubts||[]).forEach(function(q){ h += doubtBoxHtml(q); });
+  (d.strips||[]).forEach(function(s){ h += stripHtml(s); });
+  h += '</div></div>';
+
+  /* 4 分隔线 */
+  h += '<div class="wf-card-rule"></div>';
+
+  /* 5 区域索引表（真 table + caption + th scope=col） */
+  h += '<table class="wf-table wf-index-table"><caption>区域索引 · '+esc(d.id)+'</caption>'
+    + '<thead><tr><th scope="col">编号</th><th scope="col">名称</th><th scope="col">状态说明</th></tr></thead><tbody>';
+  (d.regions||[]).forEach(function(r){
+    h += '<tr><td>'+esc(r.id)+'</td><td>'+esc(r.label)+'</td><td>'+esc(r.state||"")+'</td></tr>';
+  });
+  (d.indexExtra||[]).forEach(function(r){
+    h += '<tr><td>'+esc(r.id)+'</td><td>'+esc(r.label)+'</td><td>'+esc(r.state||"")+'</td></tr>';
+  });
+  if(d.indexNote) h += '<tr class="wf-index-note"><td colspan="3">'+esc(d.indexNote)+'</td></tr>';
+  h += '</tbody></table>';
+
+  /* 6 热点清单 */
+  var hl = (d.hotspotList||[]).concat(d.hotspotExtra||[]);
+  h += '<ul class="wf-hotspot-list">';
+  hl.forEach(function(s){
+    var p = s.indexOf(" ");
+    h += '<li>'+(p > 0 ? '<b>'+esc(s.slice(0,p))+'</b>'+esc(s.slice(p)) : esc(s))+'</li>';
+  });
+  h += '</ul>';
+
+  /* 7 疑点条 */
+  (d.doubtBars||[]).forEach(function(q){
+    h += '<div class="wf-doubt-bar"><b>[疑点 '+esc(q.q)+']</b> '+esc(QTEXT[q.q])+'</div>';
+  });
+
+  h += '</article>';
+  return h;
+}
+
+/* ---- R2 新增：老鼠干 / 横滑背包 / 替换弹窗（h 与 i 共享一份基准 diff） ---- */
+var RAT_BASE = {
+  id:"WF-03h", name:"AR 主画面 · 状态变体", tags:["自由","1/1"],
+  regions:{
+    A1:{tag:"A1",label:"A1 顶部模式切换（自由）",meta:{mode:"free",flag:"自由 · 不计分"},
+      state:"自由按钮深实心 + 绿边 + 圆润；战斗按钮实心浅灰；modeFlag「自由 · 不计分」"},
+    A2:{fill:"dashed",tag:"A2",label:"A2 战斗血条（隐藏）",meta:{segs:5,off:5},lines:[],
+      state:"虚线隐藏；hp/score 未重置，数据保留"},
+    A3:{fill:"dashed",tag:"A3",label:"A3 右上分数（隐藏）",lines:[],state:"虚线隐藏；自由态不计分"},
+    A4:{tag:"A4",label:"A4 实景层",state:"静态实景 · 45° 斜线占位 · 满铺；z:0 背景不画角标，仅索引表标注"},
+    A5:{tag:"A5",label:"A5 锚定框（长按 700ms 充能）",meta:{locked:false},lines:["长按 700ms","点框锁定"],
+      state:"虚线无填充 + 四角 8px 标记；锚框内长按 700ms 充能（进度 0→700ms），达阈值后拖拽预览跟随手指、松手落位 [296,360,112,128]；安全区 [16,304]×[120,430]"},
+    A6:{tag:"A6",label:"A6 横滑背包（5 格）",box:[14,620,404,148],fill:"solid",type:"dock",
+      meta:{hscroll:true,ratSlot:"filled"},lines:[],
+      state:"背包 ▼ 手柄 404×28 + 横滑轨 388×92（4 张投掷卡 94×56：箭矢 / 大脑 / 果冻 / 粘粘手 + 第 5 槽右缘裁切）+ 轨下 1px 轴线与 5 刻度点 + ‹ ▶ 16×24 导航；第 5 槽（1/1、✕ 移除），手柄计数 0/1 → 1/1"},
+    A7:{tag:"A7",label:"A7 皮肤区（自由 · 浮层隐藏）",meta:{btn:true,panel:false,idx:1},
+      state:"皮肤按钮实心浅灰 + 自由色圆点「皮肤」；浮层仍虚线隐藏"},
+    A8:{tag:"A8",label:"A8 老鼠干常驻（松手落位）",box:[296,360,112,128],fill:"solid",shape:"round",accent:"free",type:"rat",lines:[],
+      state:"松手落位 [296,360,112,128] 后常驻扁平捏捏乐（人物扁平捏捏乐）：wf-hatch 48×64 形象占位 + 右上 1/1 chip + 左上 ✕ 移除；可戳动形变 / 玩弄；2px 绿左条仅标记自由模式、非玩偶配色；画布内文字仅「老鼠干」"}
+  },
+  dots:[
+    {id:"H1",x:130,y:224,shape:"tap"},
+    {id:"H2",x:352,y:424,shape:"tap"},
+    {id:"H3",x:24,y:36,shape:"tap"},
+    {id:"H4",x:216,y:690,shape:"swipe"},
+    {id:"H5",x:356,y:36,shape:"tap"},
+    {id:"H6",x:216,y:360,shape:"hold"}
+  ],
+  leaderList:[
+    {id:"L1",pts:[[106,86],[106,96]],label:"L1",at:[110,92]},
+    {id:"L2",pts:[[216,520],[216,540]],label:"L2",at:[220,536]},
+    {id:"L3",pts:[[216,520],[216,588],[296,588],[296,488]],label:"L3",at:[220,584]}
+  ],
+  indexNote:"老鼠干仅自由模式；战斗态第 5 槽锁定；长按 700ms 充能 → 拖拽预览 → 松手落位 [296,360,112,128]；安全区 [16,304]×[120,430]；背包 4 张投掷卡 + 第 5 槽（1/1、✕ 移除），计数 0/1 → 1/1；常驻扁平捏捏乐可戳动形变 / 玩弄；单槽 1/1、新玩偶弹窗询问是否替换；戳动/玩弄不计分不结算。背包合并现有底部物品栏为一条可左右滑动的横滑条 + 第 5 个老鼠干专属槽位。",
+  hotspotList:[
+    "H1 点锚框 → setLock(true)，虚线→实线、文案变「已锁定 · 人 · 2.4 m · 点画面投掷」",
+    "H2 戳动老鼠干 → 常驻扁平捏捏乐形变 / 玩弄，仅触感，自由态不计分不扣血不结算",
+    "H3 点模式切换 → setMode() 只切 class 与文案，不重置 hp/score，AR 内无粉/绿转场",
+    "H4 横滑背包 → 左右滑动 5 格轨，4 张投掷卡 + 第 5 格老鼠干专属槽（1/1、✕ 移除），计数 0/1 → 1/1",
+    "H5 点皮肤（仅自由）→ 4 色板展开，默认电光绿",
+    "H6 锚框内长按 700ms 充能 → 拖拽预览 → 松手落位 [296,360,112,128] 生成老鼠干；安全区 [16,304]×[120,430]；已有 1/1 时新玩偶触发替换弹窗"
+  ],
+  doubts:[], doubtBars:[], strips:[]
+};
+var RAT_H = clone(RAT_BASE);
+/* 画布内透明标注层：安全区 / 充能 / 拖拽预览 / 松手落位，均不填充、不承载 A/H/L 编号 */
+RAT_H.strips = [
+  {box:[16,120,288,310],lines:[],dashed:true,z:3,cls:"wf-safe",tag:"安全区"},
+  {box:[24,540,180,40],lines:["700ms 充能"],z:3,cls:"wf-charge-strip"},
+  {box:[220,540,48,64],lines:["预览"],dashed:true,z:3,cls:"wf-drag-ghost"},
+  {box:[296,540,112,40],lines:["松手落位"],dashed:true,z:3,cls:"wf-drop-strip"}
+];
+var RAT_I = clone(RAT_BASE);
+RAT_I.strips = RAT_H.strips.concat([{box:[8,8,416,752],lines:[],dashed:true,z:0}]);
+RAT_I.id = "WF-03i";
+RAT_I.tags = ["自由","弹窗"];
+RAT_I.regions.A8 = {tag:"A8",label:"A8 替换弹窗（条件）",box:[24,232,384,304],fill:"dashed",z:5,type:"modal",lines:[],
+  state:"条件浮层（画布内标题缩写「换掉？」）：完整弹窗标题原文「已有一只，要换掉吗？」；副说明原文「背包只能放 1 只，换掉后旧的会消失」；2×120×120 虚线对比框（旧的 / 新的，各含 64×80 斜线微缩）+ 24px → + 2×160×40 按钮框「替换」（主深实心）/「取消」（次实心浅灰）+ 1/1 chip；全灰阶、1.5px dashed"};
+RAT_I.hotspotList = [
+  "H1 点锚框 → setLock(true)，虚线→实线、文案变「已锁定 · 人 · 2.4 m · 点画面投掷」",
+  "H2 戳动老鼠干 → 弹窗出现时 gesture 被拦截，焦点留在弹窗内",
+  "H3 点模式切换 → setMode() 只切 class 与文案，不重置 hp/score；弹窗归属自由态",
+  "H4 横滑背包 → 弹窗关闭后焦点回第 5 槽，背包仍可左右滑动",
+  "H5 点皮肤（仅自由）→ 弹窗期间皮肤按钮不可用",
+  "H6 已有 1/1 再长按 ≥700ms → 弹出「换掉？」询问是否替换；Esc 关闭"
+];
+RAT_I.indexNote = RAT_BASE.indexNote + " 弹窗决策：取消=丢弃新的保留旧的，替换=旧的消失新的落松手位置；兼容原口径：取消=丢弃新的保留旧的；替换=销毁旧的、新的落在本次松手位置；Esc 关闭、焦点回第 5 槽。遮罩层：wf-dashed [8,8,416,752]、z:0、不填充（禁止大面积深底），仅索引表注记。";
+
+/* ---- 10 个状态：默认 + WF-03a…WF-03i，全部为 diff ---- */
+var VARIANTS = [
+  {
+    key:"默认", label:"默认", announce:"已切换到 WF-03 默认（战斗 · 未锁定 · Dock 收起）",
+    diff:{ id:"WF-03V", name:"AR 主画面 · 状态变体", canvasId:"wf03-canvas", switchable:true,
+      tags:["默认","战斗"], doubts:[], doubtBars:[],
+      indexNote:"基准态：战斗 / 未锁定 / Dock 收起 / hp 5/5 / score 0 / 皮肤隐藏 / 合成视图；疑点见 A 组 WF-03 与 C 组汇总。" }
+  },
+  {
+    key:"WF-03a", label:"WF-03a", announce:"已切换到 WF-03a 战斗 × 未锁定 · 误点画面被拦截",
+    diff:{ id:"WF-03a", name:"AR 主画面 · 状态变体", tags:["战斗"],
+      regions:{
+        A8:{fill:"solid",lines:[{t:"先点墨框锁定，才能糊它",s:"tiny"}],tag:"A8 · 拦截",
+          label:"A8 反馈层（toast 拦截）",state:"虚线隐藏 → 实心浅灰 + 2px 主线；toast「先点墨框锁定，才能糊它」"},
+        A5:{tag:"A5 · 拦截",label:"A5 锚定框（点击被拦截）",state:"未锁定 · 点击被拦截（仍为虚线无填充）"},
+        A2:{tag:"A2 · 5/5",label:"A2 战斗血条（hp 5/5 · 未变）",state:"显示 · hp 5/5 · 不变（doTap 直接 return，不生成墨点）"},
+        A3:{tag:"A3 · 0",label:"A3 右上分数（score 0 · 未变）",state:"显示 · score 0 · 不变"}
+      },
+      hotspots:{ H2:"H2 点画面（未锁定） → doTap 第一行 return，不生成墨点、不扣血、不计分，toast「先点墨框锁定，才能糊它」" },
+      doubts:[{id:"Q2",box:[112,176,208,356]}], doubtBars:[{q:"Q2"}],
+      indexNote:"hp 5/5 / score 0 / 无墨点：S.locked=false 时 doTap 直接 return；自由态同样被拦截。"
+    }
+  },
+  {
+    key:"WF-03b", label:"WF-03b", announce:"已切换到 WF-03b 战斗 · 已锁定 · 框内投中",
+    diff:{ id:"WF-03b", name:"AR 主画面 · 状态变体", tags:["战斗","已锁定"],
+      regions:{
+        A5:{fill:"solid",tag:"A5 · 已锁定",label:"A5 锚定框（已锁定）",meta:{locked:true},
+          lines:["锚定框 190×310","已锁定 · 人 · 2.4 m · 点画面投掷"],
+          state:"虚线 → 2px 实线 + 深实心角标 + 右上勾选圆；文案「已锁定 · 人 · 2.4 m · 点画面投掷」"},
+        A2:{tag:"A2 · hp4/5",label:"A2 战斗血条（hp 4/5）",meta:{segs:5,off:1},
+          lines:["对手","hp 4/5"],state:"5 段 → 4 段实心 + 1 段虚线；索引表 hp 5/5→4/5"},
+        A3:{tag:"A3 · 120",label:"A3 右上分数（120）",lines:[{t:"120",s:"title"}],state:"显示 · score 0→120"},
+        A8:{fill:"solid",tag:"A8 · +120",label:"A8 反馈层（+120）",lines:[{t:"+120",s:"title"}],
+          state:"隐藏 → 实心浅灰，出现浮字 +120"}
+      },
+      hotspots:{ H2:"H2 点画面（框内投中） → throws=1 / pokes=0 / score=120 / hp 4/5；+120 浮字" },
+      doubts:[], doubtBars:[],
+      indexNote:"throws=1 · pokes=0 · score=120 · hp 4/5；框内形变则 +60/pokes++。"
+    }
+  },
+  {
+    key:"WF-03c", label:"WF-03c", announce:"已切换到 WF-03c 战斗 · 物品栏展开（箭矢已选）",
+    diff:{ id:"WF-03c", name:"AR 主画面 · 状态变体", tags:["战斗","展开"],
+      regions:{
+        A6:{tag:"A6 · 展开",label:"A6 底部 Dock（展开 · 箭矢已选）",meta:{open:true,selected:"箭矢"},
+          lines:["物品 ▲"],
+          state:"收起 / selected=null → 展开 / selected=箭矢；4 张 94×56 卡实心浅灰，第 1 张深实心 aria-pressed=true"},
+        A7:{tag:"A7 · 隐藏",label:"A7 皮肤区（战斗态仍隐藏）",state:"隐藏 · 物品栏展开时皮肤区仍全部虚线隐藏"},
+        A4:{tag:"A4",label:"A4 实景层（Dock 展开对照）",state:"静态实景 · 45° 斜线占位 · 满铺（Dock 展开不改变实景层）"}
+      },
+      hotspots:{ H4:"H4 展开/收起 Dock → 选中=投掷，全不选=形变；再点同一张取消" },
+      doubts:[], doubtBars:[],
+      indexNote:"手柄 chevron ▼→▲；4 张 94×56 物品卡：箭矢（深实心 / 已选）· 大脑 · 果冻 · 粘粘手（实心浅灰）。"
+    }
+  },
+  {
+    key:"WF-03d", label:"WF-03d", announce:"已切换到 WF-03d 自由 · 默认（模式切换后）",
+    diff:{ id:"WF-03d", name:"AR 主画面 · 状态变体", tags:["自由"],
+      regions:{
+        A1:{tag:"A1 · 自由",label:"A1 顶部模式切换（自由）",meta:{mode:"free",flag:"自由 · 不计分"},
+          state:"战斗按钮 深实心→实心浅灰；自由按钮→深实心 + 绿边 + 圆润；modeFlag「战斗 · 计分」→「自由 · 不计分」"},
+        A2:{fill:"dashed",tag:"A2 · 隐藏",label:"A2 战斗血条（隐藏）",meta:{segs:5,off:5},
+          lines:[{t:"（虚线隐藏）",s:"tiny"}],state:"隐藏；hp/score 未重置，数据保留"},
+        A3:{fill:"dashed",tag:"A3 · 隐藏",label:"A3 右上分数（隐藏）",lines:[{t:"（虚线隐藏）",s:"tiny"}],
+          state:"隐藏；hp/score 未重置，数据保留"},
+        A7:{tag:"A7 · 皮肤",label:"A1 顶部模式切换（自由）",meta:{btn:true,panel:false,idx:1},
+          state:"皮肤按钮 虚线隐藏→实心浅灰 + 自由色圆点「皮肤」；浮层仍虚线隐藏"},
+        A5:{tag:"A5 · 自由",label:"A5 锚定框（自由仍需锁定）",state:"未锁定 · 待点击（自由态 doTap 仍要求 S.locked=true）"}
+      },
+      hotspots:{ H3:"H3 点模式切换 → setMode() 只切 class 与文案，不重置 hp/score，AR 内无粉/绿圆形转场" },
+      indexAdd:[{id:"A9",label:"setMode() 切换口径",state:"仅切 class 与文案；AR 内切换无粉/绿圆形转场，不重置 hp/score"}],
+      doubts:[{id:"Q2",box:[112,176,208,356]}], doubtBars:[{q:"Q2"}],
+      indexNote:"自由模式不扣血/不计分/不结算；开场长按或 AR 顶部切自由均到此；点哪糊哪与先锁定冲突见 Q2。"
+    }
+  },
+  {
+    key:"WF-03e", label:"WF-03e", announce:"已切换到 WF-03e 自由 · 皮肤面板展开（电光绿）",
+    diff:{ id:"WF-03e", name:"AR 主画面 · 状态变体", tags:["自由","展开"],
+      regions:{
+        A7:{fill:"solid",tag:"A7 · 展开",label:"A7 皮肤浮层（展开 · 电光绿）",meta:{btn:true,panel:true,idx:1},
+          state:"隐藏 → 展开 / skinIdx=1 / aria-expanded=true；浮层 14,490,404,40 实心浅灰 + 2px 主线，含 ◀ ▶ 两个导航位"},
+        A1:{tag:"A1 · 自由",label:"A1 顶部模式切换（自由）",meta:{mode:"free",flag:"自由 · 不计分"},
+          state:"自由按钮深实心 + 绿边 + 圆润；modeFlag「自由 · 不计分」"},
+        A2:{fill:"dashed",tag:"A2 · 隐藏",label:"A2 战斗血条（隐藏）",meta:{segs:5,off:5},lines:[{t:"（虚线隐藏）",s:"tiny"}],state:"隐藏；hp/score 未重置，数据保留"},
+        A3:{fill:"dashed",tag:"A3 · 隐藏",label:"A3 右上分数（隐藏）",lines:[{t:"（虚线隐藏）",s:"tiny"}],state:"隐藏；hp/score 未重置，数据保留"}
+      },
+      hotspots:{ H5:"H5 点皮肤（仅自由） → 4 色板展开，默认电光绿（深实心 + 双环，当前皮肤）" },
+      hotspotAdd:["H5b 点色板或 ◀ ▶ → setSkin(i) + toast「皮肤：X」"],
+      doubts:[], doubtBars:[],
+      indexNote:"4 色板：荧光粉 / 电光绿（深实心 + 双环，当前皮肤）/ 橘子橙 / 柠檬黄。"
+    }
+  },
+  {
+    key:"WF-03f", label:"WF-03f", announce:"已切换到 WF-03f 自由 · 滑屏换肤（橘子橙）",
+    diff:{ id:"WF-03f", name:"AR 主画面 · 状态变体", tags:["自由"],
+      regions:{
+        A4:{tag:"A4 · 滑屏",label:"A4 实景层（滑屏中）",meta:{swipe:true},
+          lines:["AR 实景 432×768"],state:"静态实景 → 滑屏中（|dx|>44 且 >|dy|+8）；画布仅加 1 条 1px 水平直角引线 + 标注「滑屏」"},
+        A7:{tag:"A7 · 橘子橙",label:"A7 皮肤区（滑屏换肤后）",meta:{btn:true,panel:true,idx:2},
+          state:"皮肤按钮色点 电光绿→橘子橙；色板激活位第 2→第 3；skinIdx 1→2"},
+        A8:{fill:"solid",tag:"A8 · toast",label:"A8 反馈层（toast）",lines:[{t:"皮肤：橘子橙",s:"tiny"}],
+          state:"隐藏 → 实心浅灰，toast「皮肤：橘子橙」"},
+        A1:{tag:"A1 · 自由",label:"A1 顶部模式切换（自由）",meta:{mode:"free",flag:"自由 · 不计分"},
+          state:"自由按钮深实心 + 绿边 + 圆润；modeFlag「自由 · 不计分」"}
+      },
+      leaders:{ L2:{pts:[[40,300],[392,300]],label:"滑屏",at:[44,292]} },
+      hotspots:{ H6:"H6 左右滑屏（仅自由） → |dx|>44 且 >|dy|+8 → setSkin(±1) + toast「皮肤：橘子橙」" },
+      indexAdd:[{id:"A9",label:"滑屏生效条件",state:"仅自由模式支持滑屏换肤；战斗模式滑屏无效；S.view==='reality' 时手势不生效"}],
+      doubts:[], doubtBars:[],
+      indexNote:"skinIdx 1→2（电光绿→橘子橙）；滑屏为 1px 水平直角引线，不改变主流程状态。"
+    }
+  },
+  {
+    key:"WF-03g", label:"WF-03g", announce:"已切换到 WF-03g 战斗 · 结算（hp 归零 900ms）",
+    diff:{ id:"WF-03g", name:"AR 主画面 · 状态变体", tags:["战斗","结算"],
+      regions:{
+        A2:{tag:"A2 · hp0/5",label:"A2 战斗血条（hp 0/5 · 归零）",meta:{segs:5,off:5},
+          lines:["对手","hp 0/5"],state:"5 段全深实心 → 5 段全虚线无填充；hp 0/5 / S.finished=true"},
+        A3:{tag:"A3 · 1,200",label:"A3 右上分数（1,200）",lines:[{t:"1,200",s:"title"}],state:"显示 · score 0→1,200"},
+        A8:{fill:"solid",tag:"A8 · 出成绩",label:"A8 反馈层（结算中）",lines:[{t:"打完了，正在出成绩",s:"tiny"}],
+          state:"隐藏 → 实心浅灰「打完了，正在出成绩」"},
+        A4:{tag:"A4",label:"A4 实景层（即将切走）",state:"静态实景 · 900ms 后 goto('result') → WF-04"}
+      },
+      leaders:{ L3:{pts:[[216,620],[216,660],[424,660]],label:"→ WF-04 · 900ms 后 goto('result')",at:[228,654]} },
+      hotspots:{ H2:"H2 hp===0 → S.finished=true，900ms 后 goto('result')（无失败 / 超时分支）" },
+      doubts:[{id:"Q4",box:[16,100,400,40]}], doubtBars:[{q:"Q4"}],
+      indexNote:"hp 0/5 · S.finished=true · 900ms 后 goto('result') → WF-04；标题固定 YOU WIN!。"
+    }
+  },
+  {
+    key:"WF-03h", label:"WF-03h", announce:"已切换到 WF-03h 自由 · 老鼠干 + 横滑背包",
+    diff:RAT_H
+  },
+  {
+    key:"WF-03i", label:"WF-03i", announce:"已切换到 WF-03i 自由 · 替换弹窗（1/1 询问是否替换）",
+    diff:RAT_I
+  }
+];
+
+/* ---- 挂载：4 主屏 + 1 可切换卡 + 9 打印变体 + 10 按钮 ---- */
+function mount(){
+  var a = document.getElementById("wfGroupA");
+  if(a) a.innerHTML = CARDS.map(function(c){ return renderCard(c, null); }).join("");
+
+  /* B 组 grid：1 张可切换卡（屏幕态）+ 9 张并列变体卡（打印态），两者都是 grid item */
+  var b = document.getElementById("wfGroupB");
+  var printHtml = VARIANTS.slice(1).map(function(v){
+    var ex = clone(v.diff);
+    ex.switchable = false;
+    delete ex.canvasId;
+    return '<div class="wf-variant-print">' + renderCard(CARDS[2], ex) + '</div>';
+  }).join("");
+  if(b) b.innerHTML = '<div class="wf-switch-slot" id="wf03-mount"></div>' + printHtml;
+
+  var sw = document.getElementById("wfStateSwitch");
+  if(sw){
+    sw.innerHTML = VARIANTS.map(function(v,i){
+      return '<button type="button" class="wf-state-btn" data-variant="'+i+'" aria-pressed="'+(i===0?"true":"false")+'" aria-controls="wf03-canvas">'+esc(v.label)+'</button>';
+    }).join("");
+    var btns = sw.querySelectorAll("button");
+    for(var i=0;i<btns.length;i++){
+      btns[i].addEventListener("click", function(){
+        setVariant(Number(this.getAttribute("data-variant")));
+      });
+    }
+  }
+
+  var live = document.getElementById("wfLive");
+  var mount03 = document.getElementById("wf03-mount");
+
+  /* 切换：整张卡即时替换，画布 id 恒为 wf03-canvas，保证 aria-controls 目标始终存在 */
+  function setVariant(n){
+    var v = VARIANTS[n];
+    if(!v) return;
+    var ex = clone(v.diff);
+    ex.canvasId = "wf03-canvas";
+    ex.switchable = true;
+    if(mount03) mount03.innerHTML = renderCard(CARDS[2], ex);
+    if(sw){
+      var bs = sw.querySelectorAll("button");
+      for(var j=0;j<bs.length;j++) bs[j].setAttribute("aria-pressed", j===n ? "true" : "false");
+    }
+    if(live) live.textContent = v.announce;
+  }
+  setVariant(0);
+
+  var pb = document.getElementById("wfPrintBtn");
+  if(pb) pb.addEventListener("click", function(){ window.print(); });
+}
+
+if(typeof document !== "undefined" && document.getElementById){
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
+  else mount();
+}
+
+/* 暴露给离线校验脚本使用（不影响页面行为） */
+if(typeof globalThis !== "undefined"){
+  globalThis.__WF__ = {CARDS:CARDS, VARIANTS:VARIANTS, QTEXT:QTEXT, mergeCard:mergeCard, renderCard:renderCard, mount:mount,
+    fitLines:fitLines, maxLines:maxLines, lineCap:lineCap, tagsLayerHtml:tagsLayerHtml, fitLeaders:fitLeaders, doubtBoxHtml:doubtBoxHtml, RAT_H:RAT_H, RAT_I:RAT_I};
+}
+</script>
+</body>
+</html>
