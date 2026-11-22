@@ -1,5 +1,7 @@
 using EarthOL.ARCore;
+using EarthOL.Deform;
 using UnityEngine;
+using System;
 
 namespace EarthOL.BodyThrow
 {
@@ -14,6 +16,9 @@ namespace EarthOL.BodyThrow
         Camera m_MainCamera;
         PersonTrackingManager m_Tracking;
         PoseDetectionManager m_Detection;
+        PersonDeformationSurface m_DeformationSource;
+        IPersonModelDeformation m_ModelDeformation;
+        MeshCollider m_ModelCollider;
         GameObject m_ModelRoot;
         Mesh m_ModelMesh;
         MeshRenderer m_ModelRenderer;
@@ -33,16 +38,52 @@ namespace EarthOL.BodyThrow
         bool m_ModelCreated;
         bool m_Presenting;
         bool m_Rotating;
+        bool m_Deforming;
+        Vector2 m_RotationOrigin;
+        GameObject m_SavedProjectile;
+        Texture2D m_SavedProjectilePreview;
+        SavedProjectileAssets m_SavedProjectileAssets;
+
+        sealed class SavedProjectileAssets
+        {
+            public Mesh mesh;
+            public Material material;
+            public Texture2D photo;
+            int m_References = 1;
+
+            public Action Retain()
+            {
+                m_References++;
+                return Release;
+            }
+
+            public void Release()
+            {
+                if (--m_References != 0) return;
+                DestroyOwned(mesh);
+                DestroyOwned(material);
+                DestroyOwned(photo);
+            }
+        }
 
         public bool IsPresenting => m_Presenting;
         public Texture PreviewTexture => m_PreviewTexture;
+        public bool HasSavedProjectile => m_SavedProjectile != null;
+        public GameObject SavedProjectileSource => m_SavedProjectile;
+        public Texture2D SavedProjectilePreview => m_SavedProjectilePreview;
+        public event Action<GameObject, Texture2D> ProjectileChanged;
+        public event Action ProjectileCleared;
 
-        public void Configure(Camera camera, PersonTrackingManager tracking, PoseDetectionManager detection)
+        public void Configure(Camera camera, PersonTrackingManager tracking, PoseDetectionManager detection,
+            PersonDeformationSurface deformationSource = null)
         {
             m_MainCamera = camera;
             m_Tracking = tracking;
             m_Detection = detection;
+            m_DeformationSource = deformationSource;
         }
+
+        public void SetDeformationSource(PersonDeformationSurface source) => m_DeformationSource = source;
 
         public void SetInteractionEnabled(bool enabled)
         {
@@ -83,6 +124,7 @@ namespace EarthOL.BodyThrow
         void LateUpdate()
         {
             if (!m_Presenting || m_PreviewCamera == null || m_ModelRoot == null) return;
+            m_ModelDeformation?.Advance(Time.unscaledDeltaTime);
             m_PreviewCamera.transform.SetPositionAndRotation(m_MainCamera.transform.position, m_MainCamera.transform.rotation);
             m_PreviewCamera.Render();
         }
@@ -119,6 +161,15 @@ namespace EarthOL.BodyThrow
             m_BackPhoto = PersonPhotoSilhouetteBuilder.CreateBackTexture(m_Photo);
             if (m_BackPhoto == null) { CancelPress(); return; }
 
+            CreateModelObject();
+            if (m_ModelRoot == null) return;
+            m_ModelCreated = true;
+            SaveProjectileSlot();
+            MovePreview(position);
+        }
+
+        void CreateModelObject()
+        {
             m_ModelRoot = new GameObject("Photo Person Showcase Model");
             m_ModelRoot.transform.SetParent(m_MainCamera.transform, false);
             m_ModelRoot.layer = 0;
@@ -139,8 +190,9 @@ namespace EarthOL.BodyThrow
             m_ModelRenderer.sharedMaterials = new[] { m_ModelMaterial, m_BackMaterial };
             m_ModelRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             m_ModelRenderer.receiveShadows = false;
-            m_ModelCreated = true;
-            MovePreview(position);
+            m_ModelCollider = m_ModelRoot.AddComponent<MeshCollider>();
+            m_ModelCollider.sharedMesh = m_ModelMesh;
+            m_ModelDeformation = m_DeformationSource != null ? m_DeformationSource.CreateModelDeformation(m_ModelRoot) : null;
         }
 
         void MovePreview(Vector2 screenPosition)
@@ -197,11 +249,28 @@ namespace EarthOL.BodyThrow
 
         void UpdateRotation()
         {
-            if (!BodyPointerFrame.TryRead(out var frame))
+            bool hasFrame = BodyPointerFrame.TryRead(out var frame);
+            ProcessPresentationPointer(frame, hasFrame);
+        }
+
+        public Rect PreviewRect
+        {
+            get
             {
-                m_Rotating = false;
-                return;
+                if (m_PreviewTexture == null) return default;
+                float maxWidth = Screen.width * .88f;
+                float maxHeight = Screen.height * .70f;
+                float aspect = m_PreviewTexture.width / (float)m_PreviewTexture.height;
+                float width = Mathf.Min(maxWidth, maxHeight * aspect);
+                float height = width / aspect;
+                return new Rect((Screen.width-width)*.5f,(Screen.height-height)*.5f,width,height);
             }
+        }
+
+        public void ProcessPresentationPointer(BodyPointerFrame frame, bool hasFrame)
+        {
+            if (!m_Presenting || m_ModelRoot == null) return;
+            if (!hasFrame) { EndModelPointer(); return; }
             if (frame.down)
             {
                 if (ARCoreModeOverlay.IsShowcaseExitPoint(frame.position))
@@ -213,14 +282,55 @@ namespace EarthOL.BodyThrow
                 m_Rotating = true;
                 m_PointerId = frame.id;
                 m_LastPointer = frame.position;
+                m_RotationOrigin = frame.position;
+                UpdateModelTouch(frame.position);
             }
             if (!m_Rotating || frame.id != m_PointerId) return;
-            if (frame.canceled || frame.released) { m_Rotating = false; return; }
+            if (frame.canceled || frame.released) { EndModelPointer(); return; }
             if (!frame.held) return;
             float delta = frame.position.x - m_LastPointer.x;
-            m_LastPointer = frame.position;
-            m_Yaw -= delta * 0.35f;
+            if (Vector2.Distance(frame.position,m_RotationOrigin) > 8f) m_Yaw -= delta * 0.35f;
             m_ModelRoot.transform.localRotation = Quaternion.Euler(0f, m_Yaw, 0f);
+            int samples = Mathf.Clamp(Mathf.CeilToInt(Vector2.Distance(frame.position,m_LastPointer)/24f),1,12);
+            for (int i=1;i<=samples;i++)
+                UpdateModelTouch(Vector2.Lerp(m_LastPointer,frame.position,i/(float)samples));
+            m_LastPointer = frame.position;
+        }
+
+        void EndModelPointer()
+        {
+            if (m_Deforming) m_ModelDeformation?.End(m_PointerId);
+            m_Deforming = false;
+            m_Rotating = false;
+        }
+
+        void UpdateModelTouch(Vector2 screenPosition)
+        {
+            if (m_ModelDeformation == null) return;
+            if (TryHitModel(screenPosition,out var hit))
+            {
+                if (m_Deforming) m_ModelDeformation.Drag(m_PointerId,hit.point);
+                else { m_ModelDeformation.Begin(m_PointerId,hit.point); m_Deforming = true; }
+            }
+            else if (m_Deforming)
+            {
+                m_ModelDeformation.End(m_PointerId);
+                m_Deforming = false;
+            }
+        }
+
+        bool TryHitModel(Vector2 screenPosition,out RaycastHit hit)
+        {
+            hit = default;
+            if (m_ModelCollider == null || m_PreviewCamera == null) return false;
+            Rect rect = PreviewRect;
+            Vector2 gui = new Vector2(screenPosition.x,Screen.height-screenPosition.y);
+            if (!rect.Contains(gui)) return false;
+            m_PreviewCamera.transform.SetPositionAndRotation(m_MainCamera.transform.position,m_MainCamera.transform.rotation);
+            Vector3 viewport = new Vector3((gui.x-rect.x)/rect.width,1f-(gui.y-rect.y)/rect.height,0);
+            Physics.SyncTransforms();
+            if (!m_ModelCollider.Raycast(m_PreviewCamera.ViewportPointToRay(viewport),out hit,6f)) return false;
+            return m_Photo == null || m_Photo.GetPixelBilinear(hit.textureCoord.x,hit.textureCoord.y).a > .2f;
         }
 
         public void ExitPresentation()
@@ -230,7 +340,88 @@ namespace EarthOL.BodyThrow
             ClearSession();
         }
 
-        public void ResetForDetectionStop() => ClearSession();
+        public void ResetForDetectionStop()
+        {
+            ClearSession();
+            ClearSavedProjectile();
+        }
+
+        public void ClearSavedProjectile()
+        {
+            if (m_SavedProjectile != null) DestroyOwned(m_SavedProjectile);
+            m_SavedProjectileAssets?.Release();
+            m_SavedProjectileAssets = null;
+            m_SavedProjectile = null;
+            m_SavedProjectilePreview = null;
+            ProjectileCleared?.Invoke();
+        }
+
+        internal Action RetainProjectileAssets(GameObject source)
+            => source == m_SavedProjectile ? m_SavedProjectileAssets?.Retain() : null;
+
+        void SaveProjectileSlot()
+        {
+            ClearSavedProjectile();
+            if (m_ModelMesh == null || m_ModelRenderer == null || m_Photo == null) return;
+            m_SavedProjectile = new GameObject("Saved Showcase Projectile");
+            m_SavedProjectile.transform.SetParent(transform, false);
+            m_SavedProjectile.SetActive(false);
+            // Keep an independent photo alive after the showcase session releases its textures.
+            m_SavedProjectilePreview = Instantiate(m_Photo);
+            m_SavedProjectileAssets = new SavedProjectileAssets
+            {
+                mesh = CreateProjectileMesh(),
+                photo = m_SavedProjectilePreview,
+                material = CreateSavedProjectileMaterial(m_ModelRenderer.sharedMaterials[0], 0)
+            };
+            var filter = m_SavedProjectile.AddComponent<MeshFilter>();
+            filter.sharedMesh = m_SavedProjectileAssets.mesh;
+            var renderer = m_SavedProjectile.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = m_SavedProjectileAssets.material;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+            ProjectileChanged?.Invoke(m_SavedProjectile, m_SavedProjectilePreview);
+        }
+
+        Mesh CreateProjectileMesh()
+        {
+            // The showcase builder stores two matching surfaces. Keep the front silhouette
+            // and its exact photo UVs, flattening only depth for a single double-sided sheet.
+            int count = m_ModelMesh.vertexCount / 2;
+            var vertices = new Vector3[count];
+            var uvs = new Vector2[count];
+            Array.Copy(m_ModelMesh.vertices, vertices, count);
+            Array.Copy(m_ModelMesh.uv, uvs, count);
+            for (int i = 0; i < count; i++) vertices[i].z = 0f;
+            var mesh = new Mesh { name = "Photo Person Projectile Sheet" };
+            mesh.vertices = vertices;
+            mesh.uv = uvs;
+            mesh.triangles = m_ModelMesh.GetTriangles(0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        Material CreateSavedProjectileMaterial(Material source, int index)
+        {
+            if (source == null) return null;
+            var template = Resources.Load<Material>("PersonShowcaseProjectile");
+            Material material = template != null ? new Material(template) : null;
+            if (material == null)
+            {
+                Shader shader = Shader.Find("EarthOL/ShowcaseProjectile");
+                if (shader == null) shader = Shader.Find("Unlit/Transparent");
+                if (shader == null) shader = Shader.Find("Sprites/Default");
+                if (shader == null) return new Material(source) { name = "Saved Showcase Projectile " + index };
+                material = new Material(shader);
+            }
+            material.name = "Saved Showcase Projectile " + index;
+            Texture texture = m_SavedProjectilePreview;
+            if (texture != null) material.mainTexture = texture;
+            if (material.HasProperty("_Color")) material.SetColor("_Color", Color.white);
+            material.renderQueue = 3000;
+            return material;
+        }
 
         void RenderPreview()
         {
@@ -249,6 +440,7 @@ namespace EarthOL.BodyThrow
 
         void ClearSession()
         {
+            EndModelPointer();
             m_PointerHeld = false;
             m_ModelCreated = false;
             m_Rotating = false;
@@ -269,6 +461,7 @@ namespace EarthOL.BodyThrow
 
         void DestroyModel()
         {
+            m_ModelDeformation?.Clear();
             if (m_ModelRoot != null) DestroyOwned(m_ModelRoot);
             if (m_ModelMesh != null) DestroyOwned(m_ModelMesh);
             if (m_ModelMaterial != null) DestroyOwned(m_ModelMaterial);
@@ -278,6 +471,9 @@ namespace EarthOL.BodyThrow
             m_ModelRoot = null;
             m_ModelMesh = null;
             m_ModelRenderer = null;
+            m_ModelCollider = null;
+            m_ModelDeformation = null;
+            m_Deforming = false;
             m_ModelMaterial = m_BackMaterial = null;
             m_Photo = m_BackPhoto = null;
         }
@@ -308,12 +504,16 @@ namespace EarthOL.BodyThrow
             foreach (Transform child in root.transform) SetLayerRecursively(child.gameObject, layer);
         }
 
-        static void DestroyOwned(Object value)
+        static void DestroyOwned(UnityEngine.Object value)
         {
             if (value == null) return;
             if (Application.isPlaying) Destroy(value); else DestroyImmediate(value);
         }
 
-        void OnDestroy() => ClearSession();
+        void OnDestroy()
+        {
+            ClearSession();
+            ClearSavedProjectile();
+        }
     }
 }

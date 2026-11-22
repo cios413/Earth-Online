@@ -65,7 +65,7 @@ namespace EarthOL.EditorTools
             {
                 var tracker = go.AddComponent<PersonTrackingManager>();
                 tracker.UpdateDetections(new[] { FullPose(.27f), FullPose(.73f) }, 10f);
-                Check(tracker.Count == 2 && tracker.Persons[0].personId != tracker.Persons[1].personId, "Two independent IDs");
+                Check(tracker.Count == 2 && tracker.Persons[0].personId != tracker.Persons[1].personId, "Two automatically tracked independent IDs");
                 int left = tracker.Persons[0].personId, right = tracker.Persons[1].personId;
                 tracker.UpdateDetections(new[] { FullPose(.73f, -.02f), FullPose(.27f,.02f) }, 10.2f);
                 Check(tracker.Find(left).screenRect.center.x < .4f && tracker.Find(right).screenRect.center.x > .6f,
@@ -77,6 +77,7 @@ namespace EarthOL.EditorTools
                 Check(tracker.Find(left) != null, "Briefly missing person must retain ID");
                 tracker.UpdateDetections(new[] { FullPose(.27f,.04f), FullPose(.73f,-.04f) }, 10.6f);
                 Check(tracker.Count == 2 && tracker.Find(left) != null, "Returning person must recover ID");
+                Check(tracker.Pick(new Vector2(.73f,.5f)) != null, "Any detected person can receive feature input");
                 tracker.Tick(12f);
                 Check(tracker.Count == 0, "Stale tracks must expire");
                 const int size = 64;
@@ -238,8 +239,7 @@ namespace EarthOL.EditorTools
                 Check(click.TryActivateAt(tap) && cartoons.RigCount==1 && cartoons.IsPersonActivated(tracking.Persons[0].personId),
                     "A 2D person tap activates the cartoon sticker without an AR anchor or depth estimate");
                 Check(!click.TryActivateAt(tap),"Rapid repeated taps must not reroll the selected sticker");
-                var canvas=Object.FindObjectsOfType<Canvas>(); Canvas overlay=null;
-                foreach(var item in canvas)if(item.name=="Cartoon2DCanvas")overlay=item;
+                var overlay=(Canvas)typeof(Cartoon2DCanvas).GetField("m_Canvas",Private).GetValue(cartoons);
                 Check(overlay!=null && overlay.renderMode==RenderMode.ScreenSpaceOverlay,"Canvas must be Screen Space Overlay");
                 var rig=overlay.GetComponentInChildren<Cartoon2DRig>();
                 Check(rig.GetComponentsInChildren<Image>().Length==10,"Ten cartoon image body parts");
@@ -321,6 +321,10 @@ namespace EarthOL.EditorTools
             {
                 var bootstrap=new GameObject("BootstrapMigrationTest").AddComponent<ARCoreMainSceneBootstrap>();
                 var start=(IEnumerator)Invoke(bootstrap,"Start"); start.MoveNext();
+                Check(bootstrap.DetectionManager==null && !bootstrap.SessionActive,"Entry menu waits before creating recognition");
+                Set(bootstrap,"startPersonDetection",false);
+                bootstrap.EnterApp(AppMode.Free);
+                while(start.MoveNext()) { }
                 Check(bootstrap.DetectionManager!=null && bootstrap.PersonTracking!=null && bootstrap.CartoonCanvas!=null &&
                     bootstrap.ClickController!=null && bootstrap.ShowcaseController!=null && bootstrap.ThrowController!=null,
                     "Bootstrap creates the four 2D features around one detector/tracker");
@@ -364,7 +368,7 @@ namespace EarthOL.EditorTools
                     tracking.TrackingUpdateCount==ticks && tracking.FlowUpdateCount==flow,"Stop must halt capture, tensors, inference, decode, tracking and flow");
                 manager.StartDetection(); Check(manager.DetectionEnabled,"Restart resumes detection");
                 tracking.UpdateDetections(new[]{FullPose()},Time.realtimeSinceStartup);
-                Check(tracking.Count==1 && tracking.Find(originalId)==null,"Restart creates a fresh track after the stop reset");
+                Check(tracking.Count==1 && tracking.Find(originalId)==null,"Restart automatically creates a fresh track after the stop reset");
                 manager.StopDetection();
                 // Real execution timing of the lightweight update path, not an inferred speed claim.
                 tracking.UpdateDetections(new[]{FullPose(.3f),FullPose(.7f)},10f);

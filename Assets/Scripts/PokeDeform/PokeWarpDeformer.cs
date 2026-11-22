@@ -152,10 +152,21 @@ namespace EarthOL.Deform
 
         void OnDisable()
         {
+            ResetPokes();
+        }
+
+        public void ResetPokes()
+        {
             if (m_Pokes == null) return;
 
             for (int i = 0; i < m_Pokes.Length; i++) m_Pokes[i] = default;
             if (m_Renderer != null) PushToShader(true);
+        }
+
+        /// <summary>Expose the existing spring output to another render target; spring integration remains unchanged.</summary>
+        public void CopyDeformationTo(Renderer target)
+        {
+            if (target != null && m_Block != null) target.SetPropertyBlock(m_Block);
         }
 
         // ---------------------------------------------------------------- 建卡片

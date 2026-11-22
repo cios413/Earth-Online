@@ -1,11 +1,11 @@
 # Person interaction runtime
 
-The ARCore scene has four screen-space features controlled by the four buttons in the upper-left corner:
+The ARCore scene shares four screen-space capabilities between free/combat sessions. The live interface uses a retractable bottom wheel and a right-side showcase button; free mode also has a person-sticker button:
 
 1. `人物形变` uses `PersonDeformationSurface` and the spring-based camera warp around the tracked 2D person.
-2. `人物贴图` activates the live jelly skeleton when the person is tapped.
+2. The live jelly skeleton is activated on the defeated person when combat health reaches zero.
 3. `人物展示` creates the captured two-sided inflated photo model and opens its rotation view.
-4. `3D投掷` opens a four-item thumbnail picker on a long press. A tap launches the selected authored 3D prefab toward a tracked 2D person; after a short camera-aligned flight it stays attached to the same person-relative position and follows the live bounding box.
+4. Pull the bottom wheel up to select items horizontally and tap a person to throw the center item at that exact position. Push the wheel down to restore deformation-only person touches. A hit stays attached to the same person-relative position and follows the live bounding box.
 
 All four features share `PoseDetectionManager` and `PersonTrackingManager`. The throw path uses no AR anchors, measured body depth, AR planes, or world-space collision targeting. It uses the authored 3D throwable prefabs in `Resources/Throwables/Catalog.asset`, rendered in a camera-aligned virtual layer and attached using the 2D pose target.
 
@@ -17,4 +17,36 @@ The throwable catalog includes a fifth jelly alien built from the supplied three
 
 The showcase photo material uses a fixed side light in preview-camera coordinates. AR camera/gyroscope rotation does not change its lighting; dragging the model still changes its surface orientation relative to that light.
 
+All four modes use automatic multi-person detection and tracking. No global double-tap selection or single-tap delay is required. Tap each person to activate its sticker or aim a projectile, press/drag a person to deform the live image, or hold/drag any detected person into the showcase. Each effect follows the person ID it was created for.
+
+After dragging a person into the showcase, tapping the displayed photo mesh applies the same stretch/bulge spring as person deformation. Swiping still rotates the model; sampled pointer crossings also deform its front/back surfaces. `PersonDeformationSurface.CreateModelDeformation` exposes `IPersonModelDeformation`, whose adapter reuses `PokeWarpDeformer` settings, spring stepping and shader output. The camera-view deformation path is not driven by showcase gestures. The original curved mesh, two photo materials and fixed side lighting remain in use. Exit, mode changes and stop recognition clear the model deformation along with its preview resources. `ShowcaseInteractionValidation.Validate` checks model picking, rotation plus deformation, GPU rebound/recovery, and multi-person feature regressions. A synthetic checkerboard preview is saved as `ArtPreviews/ShowcaseDeformationStages.png`.
+
+Stop recognition clears tracks and all generated feature effects. Restart automatically detects and tracks people again. Multiple people can carry independent stickers, 3D projectiles and slime simultaneously.
+
 `ProjectileSlimeValidation.BuildAndValidate` builds the alien/material assets and verifies the five projectiles, impact/settle lifecycle, slime fusion on the GPU and lighting invariance. Three-view and slime progression previews are saved in `ArtPreviews/`.
+
+## Application entry and combat
+
+The main scene starts with `战斗模式` / `自由模式`. `AppMode` selects application rules; existing `GameMode` values remain available to compatibility/editor code. Both modes use the same wheel and showcase UI, with direct person deformation in the default live view. `ARCoreMainSceneBootstrap` creates its camera, detector, tracker and feature controllers once after the initial choice. Returning with `返回选择` stops recognition, clears all effects and combat rounds, and reuses those instances for the next session. Free mode has no combat accounting.
+
+Combat adapts wang commit `53a907b8b899be17b3f2a32bbf40f963f6b242ee`, specifically attack definitions, damage configuration precedence, `B * combo * critical`, the 4-second combo window, the original 1–3 multiplier curve, 10% / 1.5 critical defaults and 60/120/240 health tiers. The integration intentionally uses the current `Person3DThrowController` and `PersonDeformationSurface`; it does not import wang's scene bootstrap, detector, tracker, old projectile spawner or double-tap input delay.
+
+`PersonCombatController` adapts existing tracked people into independent `CombatRound` records. Every confirmed hit carries a person ID, unique event ID and monotonically assigned round token. Damage, combo, history, critical and defeat state belong to that round. Old projectiles are rejected after a round restart or session reset. Lost tracks expire from active combat; re-detected new IDs start new rounds without identity inference. Feature changes break active combos, cancel gestures and retain health/history. In-flight projectiles retain their captured round context and may resolve after changing features.
+
+In combat the collapsed wheel permits visual person deformation without barehand damage. Expanding it routes person taps to the original throw path. Projectiles count damage only on the first attached transition through `InteractionConfirmed`; launch, slime flow and subsequent attachment frames do not count. Legacy press/swipe/held compatibility methods remain available for editor regressions. Photo-model deformation and showcase rotation are visual-only in both application modes.
+
+Battle settings at the top change the health tier for future rounds. Zero health immediately activates the existing `Cartoon2DCanvas` rig for that person, without changing the selected feature or clearing other people's effects. Each defeat also produces a result with attack counts, highest combo, critical count and applied damage; continue with other people or restart that person's round. Restart deactivates only that person's defeat sticker. The public `AttackResolved`, `Defeated` and `RoundRestarted` events provide target-specific integration. No combat code changes detection scheduling or person association; `PoseDetectionManager.SetInferencePaused` remains the existing compatibility no-op.
+
+`CombatIntegrationValidation.Validate` runs the existing showcase/multi-person GPU regressions plus damage/critical/timeout rules, application selection and reuse, free-mode isolation, multi-person press/swipe/held input, actual projectile attachment, duplicate/stale event rejection and stop/reset lifecycle. Configuration assets can optionally be supplied at `Resources/Combat/CombatConfig.asset`; missing assets use the adapted wang defaults and the shared throwable catalog, including JellyAlien.
+
+## Shared retractable wheel
+
+Both application modes reuse one `FreeModeWheel` and `FreeWheelLayout` to display the catalog in a bottom arc. On the 1260×2732 reference screen the expanded arc reaches 720px above the bottom at its center and 517px at both edges. Vertical dimensions follow screen height, horizontal positions follow screen width, and circular diameters use a uniform scale. The center asset is largest/opaque, with two smaller and progressively faded neighbors on each side. A cached RGBA panel contains actual transparent holes over the circular catalog sprites. Horizontal dragging moves the shared catalog cyclically and snaps to the nearest item. Vertical dragging moves the entire wheel, with direction locking so selection and retraction cannot fire a projectile.
+
+One additional runtime slot is reserved for `人物展示模型`. Creating a new showcase model saves a flat, double-sided photo sheet with the original photo colors, silhouette and narrow contour shadow. Independent mesh/material/texture assets survive closing the showcase; active throws retain them across slot replacement. The slot is removed when recognition stops or the app returns to the entry screen. The saved sheet uses the same projectile flight/attachment/slime pipeline as catalog projectiles.
+
+Sessions start collapsed, leaving 56px of the arc visible at the reference height with an upward chevron above it. Pull upward from that edge or arrow to expand; pressing the expanded wheel shows a downward chevron. Push downward to retract. Releasing a partial drag settles at the nearest endpoint; canceled drags restore the previous state. When expanded, a short tap on a tracked person calls `Person3DThrowController.TryThrowAt` with the exact tap position and the center-selected item, restoring the original bottom-of-screen launch and flight. Background clicks, long holds and drags do not fire. There is no dashed aiming line or confirmation ring. Collapsed person touches only deform the live image. Hits retain rebound, attachment, merged slime and local deformation.
+
+`人物展示` appears at the same location in both modes; pressing it again returns to the default live view. Free mode also retains `人物贴图`. These explicit features keep their own person gestures; the wheel hides during full-screen photo presentation. The shared wheel owns person-tap launch input without reopening the legacy picker. Battle settings and result modals cancel pending touches and block launches. `PlayLocalImpact` pools at most four small person-relative deformation regions, reuses the same `PokeWarpDeformer` settings/integrator and handles hits in either application mode. Detection/association logic is unchanged.
+
+`FreeWheelValidation.Validate` extends combat/showcase regressions with expanded/collapsed geometry, GPU aperture alpha, pull/push gestures and arrows, cyclic selection, original flight targeting at the tap position, collapsed deformation-only input, pointer ownership and canceled touches, stop/session reset, shared battle damage and per-person defeat/restart stickers.

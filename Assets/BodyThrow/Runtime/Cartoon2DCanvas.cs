@@ -35,6 +35,13 @@ namespace EarthOL.BodyThrow
         }
         public JellySkeletonPalette PaletteFor(int id) => m_Palettes[id];
 
+        public void DeactivatePerson(int id)
+        {
+            m_Selected.Remove(id);
+            m_Palettes.Remove(id);
+            Refresh();
+        }
+
         public void Configure(Camera camera, PersonTrackingManager tracking)
         {
             m_Camera = camera;

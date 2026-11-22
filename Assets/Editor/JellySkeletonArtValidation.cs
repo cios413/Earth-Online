@@ -159,9 +159,9 @@ namespace EarthOL.EditorTools
                     Check(rig.transform.position.x>previousRoot.x,"Art rig follows live bounding box movement");
                     Check(cartoons.PaletteFor(id).body==previousPalette.body && cartoons.PaletteFor(id).limbs==previousPalette.limbs,
                         "Live movement cannot reroll a selected palette");
-                    tracking.SuspendPeople();cartoons.Refresh();
+                    tracking.Find(id).trackingConfidence=0f;cartoons.Refresh();
                     Check(cartoons.RigCount==0 && !shell.IsVisible,"Temporarily lost person hides both layers");
-                    tracking.ResumeCandidates(time+.3f);tracking.UpdateDetections(new[]{moving},time+.4f);cartoons.Refresh();
+                    tracking.UpdateDetections(new[]{moving},time+.4f);cartoons.Refresh();
                     var recovered=canvas.GetComponentInChildren<Cartoon2DRig>();
                     Check(recovered==rig && recovered.PersonId==id && recovered.Palette.body==previousPalette.body &&
                         recovered.Palette.limbs==previousPalette.limbs,"Recovery reuses original ID/palette without new material");

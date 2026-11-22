@@ -4,6 +4,10 @@ Shader "EarthOL/ShowcasePhoto"
     {
         _MainTex ("Photo", 2D) = "white" {}
         _Color ("Tint", Color) = (1,1,1,1)
+        [HideInInspector] _PokePos0 ("Poke 0", Vector) = (0,0,0,0)
+        [HideInInspector] _PokePos1 ("Poke 1", Vector) = (0,0,0,0)
+        [HideInInspector] _PokePos2 ("Poke 2", Vector) = (0,0,0,0)
+        [HideInInspector] _PokePos3 ("Poke 3", Vector) = (0,0,0,0)
     }
     SubShader
     {
@@ -20,9 +24,29 @@ Shader "EarthOL/ShowcasePhoto"
             struct v2f { float4 vertex:SV_POSITION; float3 viewNormal:TEXCOORD0; float2 uv:TEXCOORD1; };
             sampler2D _MainTex;
             fixed4 _Color;
+            float4 _PokePos0, _PokePos1, _PokePos2, _PokePos3;
+            float _PokeAmp0, _PokeAmp1, _PokeAmp2, _PokeAmp3;
+            float _PokeBulge0, _PokeBulge1, _PokeBulge2, _PokeBulge3;
+            void WarpModel(float3 p,float4 poke,float stretch,float bulge,inout float3 displacement)
+            {
+                if(poke.w<=.000001)return;
+                float3 delta=p-poke.xyz;
+                float distance=length(delta);
+                if(distance>=poke.w)return;
+                float x=1-distance/poke.w;
+                float influence=x*x*(3-2*x);
+                // Same plane-warp formula; a common local plane normal keeps both photo surfaces joined.
+                displacement+=float3(delta.xy,0)*(stretch*influence);
+                displacement.z+=bulge*influence;
+            }
             v2f vert(appdata v)
             {
-                v2f o; o.vertex=UnityObjectToClipPos(v.vertex);o.uv=v.uv;
+                float3 displacement=0;
+                WarpModel(v.vertex.xyz,_PokePos0,_PokeAmp0,_PokeBulge0,displacement);
+                WarpModel(v.vertex.xyz,_PokePos1,_PokeAmp1,_PokeBulge1,displacement);
+                WarpModel(v.vertex.xyz,_PokePos2,_PokeAmp2,_PokeBulge2,displacement);
+                WarpModel(v.vertex.xyz,_PokePos3,_PokeAmp3,_PokeBulge3,displacement);
+                v2f o; o.vertex=UnityObjectToClipPos(float4(v.vertex.xyz+displacement,1));o.uv=v.uv;
                 o.viewNormal=mul((float3x3)UNITY_MATRIX_IT_MV,v.normal);
                 return o;
             }

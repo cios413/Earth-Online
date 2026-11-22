@@ -1,5 +1,6 @@
 using System.Collections;
 using EarthOL.BodyThrow;
+using EarthOL.Combat;
 using Unity.XR.CoreUtils;
 using UnityEngine;
 using UnityEngine.SpatialTracking;
@@ -32,24 +33,86 @@ namespace EarthOL.ARCore
         public BodyPoseTracker PoseTracker { get; private set; }
         public BodyProjectileSpawner Spawner { get; private set; }
         public GameMode CurrentMode { get; private set; }
+        public AppMode SelectedAppMode { get; private set; }
+        public bool SessionActive { get; private set; }
+        public bool IsInitializing { get; private set; }
+        public bool RuntimeReady { get; private set; }
+        public int SessionVersion { get; private set; }
+        public PersonCombatController CombatController { get; private set; }
+        public FreeModeWheel FreeWheel { get; private set; }
+        bool m_EntryRequested;
+        ARCoreModeOverlay m_Overlay;
         ARSession m_Session;
         XRGeneralSettings m_XRSettings;
         bool m_StartedXR;
 
         private IEnumerator Start()
         {
+            m_Overlay = new GameObject("ARCore Mode Overlay").AddComponent<ARCoreModeOverlay>();
+            m_Overlay.Configure(this);
+            while (!m_EntryRequested) yield return null;
+            IsInitializing = true;
+            BuildSharedRuntime();
+            yield return InitializeXR();
+            RuntimeReady = true;
+            IsInitializing = false;
+            BeginSession();
+        }
+
+        // One set of components for both application modes. The startup menu creates no detector.
+        void BuildSharedRuntime()
+        {
             BuildARCamera();
             BuildPersonSystems();
             PersonDeformer = gameObject.AddComponent<PersonDeformationSurface>();
             PersonDeformer.Configure(ARCamera, PersonTracking, DistanceEstimator, DetectionManager);
+            ShowcaseController.SetDeformationSource(PersonDeformer);
+            ShowcaseController.ProjectileChanged += OnShowcaseProjectileChanged;
+            ShowcaseController.ProjectileCleared += OnShowcaseProjectileCleared;
             PersonDeformer.enabled = false;
-            var overlay = new GameObject("ARCore Mode Overlay").AddComponent<ARCoreModeOverlay>();
-            overlay.Configure(this);
+            CombatController = gameObject.AddComponent<PersonCombatController>();
+            CombatController.Configure(ARCamera, PersonTracking, PersonDeformer, ThrowController);
+            CombatController.Defeated += OnPersonDefeated;
+            CombatController.RoundRestarted += OnRoundRestarted;
+            FreeWheel = gameObject.AddComponent<FreeModeWheel>();
+            FreeWheel.Configure(this);
+            ThrowController.InteractionConfirmed += OnPersonImpact;
             var light = new GameObject("ARCore Light").AddComponent<Light>();
             light.type = LightType.Directional;
             light.intensity = 1.1f;
             light.transform.rotation = Quaternion.Euler(45f, -30f, 0f);
-            yield return InitializeXR();
+        }
+
+        public void EnterApp(AppMode mode)
+        {
+            if (SessionActive || IsInitializing || m_EntryRequested && !RuntimeReady) return;
+            SelectedAppMode = mode;
+            m_EntryRequested = true;
+            if (RuntimeReady) BeginSession();
+        }
+
+        void BeginSession()
+        {
+            SessionVersion++;
+            SessionActive = true;
+            CombatController.BeginSession(SelectedAppMode == AppMode.Combat, SessionVersion);
+            if (SelectedAppMode == AppMode.Combat) ThrowController.SelectProjectile(0);
+            m_Overlay.SelectFeature(GameMode.Deform);
+            FreeWheel.SetExpanded(false);
+            if (startPersonDetection) DetectionManager.StartDetection();
+        }
+
+        public void ReturnToSelection()
+        {
+            if (!RuntimeReady || IsInitializing) return;
+            SessionActive = false;
+            SessionVersion++;
+            DetectionManager.StopDetection();
+            CombatController.BeginSession(false, SessionVersion);
+            ClickController.enabled = false;
+            ShowcaseController.SetInteractionEnabled(false);
+            ThrowController.SetInteractionEnabled(false);
+            PersonDeformer.enabled = false;
         }
 
         private void BuildARCamera()
@@ -111,7 +174,8 @@ namespace EarthOL.ARCore
             DetectionManager.FlowFramesPerSecond = lowMemoryMobile ? Mathf.Min(personFlowFps, 10f) : personFlowFps;
             DetectionManager.CaptureMaxSide = lowMemoryMobile ? 256 : 384;
             DetectionManager.AdaptiveMobileBudget = true;
-            DetectionManager.AutoStart = startPersonDetection;
+            // The application entry owns startup; the detector itself is unchanged.
+            DetectionManager.AutoStart = false;
             var profiler = gameObject.AddComponent<PersonDetectionProfiler>();
             profiler.Configure(DetectionManager);
             if (lowMemoryMobile)
@@ -137,21 +201,58 @@ namespace EarthOL.ARCore
 
         public void SetMode(GameMode mode)
         {
+            FreeWheel?.ResetInteraction();
+            CombatController?.OnFeatureChanged(mode);
+            ClickController?.ResetInput();
             bool deform = mode == GameMode.Deform;
             CurrentMode = mode;
             if (ClickController != null) ClickController.enabled = mode == GameMode.Sticker;
             if (ShowcaseController != null) ShowcaseController.SetInteractionEnabled(mode == GameMode.Showcase);
-            if (ThrowController != null) ThrowController.SetInteractionEnabled(mode == GameMode.Throw);
-            if (PersonDeformer != null) PersonDeformer.enabled = deform;
+            if (ThrowController != null)
+            {
+                ThrowController.SetInteractionEnabled(true);
+                ThrowController.ReadPointerInput = false;
+            }
+            if (PersonDeformer != null)
+            {
+                PersonDeformer.enabled = true;
+                PersonDeformer.ReadPointerInput = deform;
+                if (!deform) PersonDeformer.ResetEffects();
+            }
         }
+
+        void OnPersonImpact(PersonInteractionHit hit)
+        {
+            if (SessionActive && !ShowcaseController.IsPresenting)
+                PersonDeformer.PlayLocalImpact(hit.personId, hit.viewportPoint);
+        }
+
+        void OnPersonDefeated(CombatRound round)
+        {
+            if (SessionActive && SelectedAppMode == AppMode.Combat && PersonTracking.Find(round.PersonId) != null &&
+                !CartoonCanvas.IsPersonActivated(round.PersonId))
+                CartoonCanvas.ActivatePerson(round.PersonId);
+        }
+
+        void OnRoundRestarted(int personId) => CartoonCanvas.DeactivatePerson(personId);
+        void OnShowcaseProjectileChanged(GameObject source, Texture2D preview)
+        {
+            ThrowController.SetShowcaseProjectile(source, preview);
+            FreeWheel.ResetInteraction();
+        }
+        void OnShowcaseProjectileCleared() => ThrowController.ClearShowcaseProjectile();
 
         void ResetFeatureEffects()
         {
+            FreeWheel?.ResetInteraction();
+            CombatController?.ResetRounds();
             PersonDeformer?.ResetEffects();
             ClickController?.ResetInput();
             CartoonCanvas?.ClearSelection();
             ShowcaseController?.ResetForDetectionStop();
             ThrowController?.ClearEffects();
+            if (ThrowController != null) ThrowController.ReadPointerInput = false;
+            if (PersonDeformer != null) PersonDeformer.ReadPointerInput = CurrentMode == GameMode.Deform;
         }
 
         private IEnumerator InitializeXR()
@@ -173,6 +274,17 @@ namespace EarthOL.ARCore
 
         private void OnDestroy()
         {
+            if (CombatController != null)
+            {
+                CombatController.Defeated -= OnPersonDefeated;
+                CombatController.RoundRestarted -= OnRoundRestarted;
+            }
+            if (ShowcaseController != null)
+            {
+                ShowcaseController.ProjectileChanged -= OnShowcaseProjectileChanged;
+                ShowcaseController.ProjectileCleared -= OnShowcaseProjectileCleared;
+            }
+            if (ThrowController != null) ThrowController.InteractionConfirmed -= OnPersonImpact;
             if (DetectionManager != null) DetectionManager.DetectionStopping -= ResetFeatureEffects;
             if (m_StartedXR && m_XRSettings != null && m_XRSettings.Manager != null)
             {

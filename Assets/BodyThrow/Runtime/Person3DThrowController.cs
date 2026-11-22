@@ -28,11 +28,21 @@ namespace EarthOL.BodyThrow
             public float impactAge;
             public float halfDepth;
             public Color slimeColor;
+            public string actionId;
+            public int context;
+            public long eventId;
+            public bool wheelFlight;
+            public Vector2 targetViewport;
+            public float missAge;
+            public System.Action releaseVisualAssets;
         }
 
         Camera m_Camera;
         PersonTrackingManager m_Tracking;
         BodyProjectileCatalog m_Catalog;
+        GameObject m_ShowcaseSource;
+        Texture2D m_ShowcasePreview;
+        string m_ShowcaseName = "人物展示模型";
         readonly List<ThrownItem> m_Items = new List<ThrownItem>();
         readonly Dictionary<int, PersonSlimeSurface> m_SlimeSurfaces = new Dictionary<int, PersonSlimeSurface>();
         readonly List<int> m_EmptySurfaces = new List<int>();
@@ -47,6 +57,11 @@ namespace EarthOL.BodyThrow
         float m_PressTime;
 
         public bool IsPickerOpen => m_PickerOpen;
+        public event System.Action<PersonInteractionHit> InteractionConfirmed;
+        public System.Func<int, int> InteractionContext { get; set; }
+        public bool ReadPointerInput { get; set; } = true;
+        public string SelectedProjectileKey => TryGetEntry(m_SelectedProjectile, out var entry) ? entry.key : string.Empty;
+        public Texture2D SelectedProjectilePreview => GetProjectilePreview(m_SelectedProjectile);
         public int SelectedProjectileIndex => m_SelectedProjectile;
         public int ActiveProjectileCount => m_Items.Count;
         public int SlimeSurfaceCount => m_SlimeSurfaces.Count;
@@ -59,7 +74,10 @@ namespace EarthOL.BodyThrow
                 return count;
             }
         }
-        public string SelectedProjectileName => TryGetEntry(m_SelectedProjectile, out var entry) ? entry.displayName : "投掷物";
+        public string SelectedProjectileName => GetProjectileName(m_SelectedProjectile);
+        public int ShowcaseProjectileIndex => m_Catalog != null && m_Catalog.entries != null ? m_Catalog.entries.Length : 0;
+        public bool HasShowcaseProjectile => m_ShowcaseSource != null;
+        public int ProjectileCount => ShowcaseProjectileIndex + (HasShowcaseProjectile ? 1 : 0);
 
         public void Configure(Camera camera, PersonTrackingManager tracking, BodyProjectileCatalog catalog)
         {
@@ -90,15 +108,43 @@ namespace EarthOL.BodyThrow
 
         public bool SelectProjectile(int index)
         {
+            if (HasShowcaseProjectile && index == ShowcaseProjectileIndex)
+            { m_SelectedProjectile = index; return true; }
             if (!TryGetEntry(index, out var entry) || entry.prefab == null) return false;
             m_SelectedProjectile = index;
             return true;
         }
 
+        public void SetShowcaseProjectile(GameObject source, Texture2D preview)
+        {
+            m_ShowcaseSource = source;
+            m_ShowcasePreview = preview;
+            if (!HasShowcaseProjectile && m_SelectedProjectile >= ShowcaseProjectileIndex) m_SelectedProjectile = 0;
+        }
+
+        public void ClearShowcaseProjectile()
+        {
+            m_ShowcaseSource = null;
+            m_ShowcasePreview = null;
+            if (m_SelectedProjectile >= ShowcaseProjectileIndex) m_SelectedProjectile = 0;
+        }
+
+        public Texture2D GetProjectilePreview(int index)
+        {
+            if (HasShowcaseProjectile && index == ShowcaseProjectileIndex) return m_ShowcasePreview;
+            return TryGetEntry(index, out var entry) ? entry.preview : null;
+        }
+
+        public string GetProjectileName(int index)
+        {
+            if (HasShowcaseProjectile && index == ShowcaseProjectileIndex) return m_ShowcaseName;
+            return TryGetEntry(index, out var entry) ? entry.displayName : "投掷物";
+        }
+
         void Update()
         {
             UpdateThrownItems(Time.unscaledDeltaTime);
-            if (!m_InteractionEnabled || m_Camera == null || m_Tracking == null) return;
+            if (!m_InteractionEnabled || !ReadPointerInput || m_Camera == null || m_Tracking == null) return;
             if (!BodyPointerFrame.TryRead(out var frame))
             {
                 if (m_PointerHeld) CancelGesture();
@@ -220,22 +266,49 @@ namespace EarthOL.BodyThrow
         }
 
         public bool TryThrowAt(Vector2 screenPosition)
+            => TryLaunch(new Vector2(.5f, .08f), screenPosition, false);
+
+        /// <summary>The free wheel uses the same authored models, attachments and slime as ordinary throwing.</summary>
+        public bool TryThrowFromWheel(Vector2 startScreen, Vector2 targetScreen)
+        {
+            if (m_Camera == null) return false;
+            return TryLaunch(m_Camera.ScreenToViewportPoint(startScreen), targetScreen, true);
+        }
+
+        public Vector3 PreviewWheelPoint(Vector2 startScreen, Vector2 targetScreen, float progress)
+        {
+            Vector3 local = FlightPoint(LocalPoint(m_Camera.ScreenToViewportPoint(startScreen), StartDepth),
+                LocalPoint(m_Camera.ScreenToViewportPoint(targetScreen), PersonLayerDepth), progress, true);
+            return m_Camera.WorldToScreenPoint(m_Camera.transform.TransformPoint(local));
+        }
+
+        static Vector3 FlightPoint(Vector3 start, Vector3 target, float t, bool parabolic)
+            => Vector3.Lerp(start, target, t) + (parabolic
+                ? Vector3.up * (.18f * 4f * t * (1f - t))
+                : Vector3.up * Mathf.Sin(t * Mathf.PI) * .18f);
+
+        bool TryLaunch(Vector2 startViewport, Vector2 screenPosition, bool wheelFlight)
         {
             if (!m_InteractionEnabled || m_Camera == null || m_Tracking == null ||
-                !TryGetEntry(m_SelectedProjectile, out var entry) || entry.prefab == null) return false;
+                !TryGetLaunchVisual(m_SelectedProjectile, out var prefab, out var source, out var actionId, out var slimeColor)) return false;
             Vector3 viewport3 = m_Camera.ScreenToViewportPoint(screenPosition);
             Vector2 viewport = new Vector2(viewport3.x, viewport3.y);
             PersonPoseData person = m_Tracking.Pick(viewport);
-            if (person == null) return false;
-            Rect bounds = person.screenRect;
-            var item = CreateThrownItem(entry.prefab);
+            if (person == null && !wheelFlight) return false;
+            Rect bounds = person != null ? person.screenRect : new Rect(0, 0, 1, 1);
+            var item = source != null ? CreateThrownItem(source, GetProjectileName(m_SelectedProjectile)) : CreateThrownItem(prefab);
             if (item == null) return false;
-            item.personId = person.personId;
-            item.slimeColor = entry.slimeColor;
+            item.personId = person != null ? person.personId : -1;
+            item.wheelFlight = wheelFlight;
+            item.targetViewport = viewport;
+            item.actionId = actionId;
+            item.context = person != null && InteractionContext != null ? InteractionContext(person.personId) : 0;
+            item.eventId = PersonInteractionHit.NextId();
+            item.slimeColor = slimeColor;
             item.normalizedOffset = new Vector2(
                 Mathf.Clamp01((viewport.x - bounds.xMin) / Mathf.Max(.001f, bounds.width)),
                 Mathf.Clamp01((viewport.y - bounds.yMin) / Mathf.Max(.001f, bounds.height)));
-            item.startLocal = LocalPoint(new Vector2(.5f, .08f), StartDepth);
+            item.startLocal = LocalPoint(startViewport, StartDepth);
             item.gameObject.transform.localPosition = item.startLocal;
             Vector3 direction = LocalPoint(viewport, PersonLayerDepth) - item.startLocal;
             item.gameObject.transform.GetChild(0).localRotation = Quaternion.LookRotation(direction, Vector3.up);
@@ -266,6 +339,29 @@ namespace EarthOL.BodyThrow
             root.transform.SetParent(m_Camera.transform, false);
             root.transform.localScale = Vector3.one * ProjectileVisualScale;
             var instance = Object.Instantiate(prefab.gameObject, root.transform);
+            PrepareThrownVisual(instance);
+            return new ThrownItem { gameObject = root };
+        }
+
+        ThrownItem CreateThrownItem(GameObject source, string displayName)
+        {
+            if (source == null || m_Camera == null) return null;
+            var root = new GameObject("3D Thrown " + displayName);
+            root.transform.SetParent(m_Camera.transform, false);
+            root.transform.localScale = Vector3.one * ProjectileVisualScale;
+            var instance = Object.Instantiate(source, root.transform);
+            PrepareThrownVisual(instance);
+            var showcase = source.GetComponentInParent<PersonShowcaseController>();
+            return new ThrownItem
+            {
+                gameObject = root,
+                releaseVisualAssets = showcase != null ? showcase.RetainProjectileAssets(source) : null
+            };
+        }
+
+        void PrepareThrownVisual(GameObject instance)
+        {
+            instance.SetActive(true);
             var bodyProjectile = instance.GetComponent<BodyProjectile>();
             if (bodyProjectile != null) bodyProjectile.enabled = false;
             var oldBounce = instance.GetComponent<ProjectileImpactBounce>();
@@ -279,7 +375,16 @@ namespace EarthOL.BodyThrow
             foreach (var collider in instance.GetComponentsInChildren<Collider>(true)) collider.enabled = false;
             instance.transform.localScale = Vector3.one;
             instance.transform.localRotation = Quaternion.identity;
-            return new ThrownItem { gameObject = root };
+        }
+
+        bool TryGetLaunchVisual(int index, out BodyProjectile prefab, out GameObject source,
+            out string actionId, out Color slimeColor)
+        {
+            prefab = null; source = null; actionId = string.Empty; slimeColor = Color.white;
+            if (HasShowcaseProjectile && index == ShowcaseProjectileIndex)
+            { source = m_ShowcaseSource; actionId = "ShowcaseModel"; slimeColor = new Color(.45f, .72f, 1f); return true; }
+            if (!TryGetEntry(index, out var entry) || entry.prefab == null) return false;
+            prefab = entry.prefab; actionId = entry.key; slimeColor = entry.slimeColor; return true;
         }
 
         void UpdateThrownItems(float deltaTime)
@@ -289,25 +394,41 @@ namespace EarthOL.BodyThrow
             {
                 var item = m_Items[i];
                 PersonPoseData person = m_Tracking != null ? m_Tracking.Find(item.personId) : null;
-                if (item.gameObject == null || person == null)
+                if (item.gameObject == null || person == null && !item.wheelFlight)
                 {
                     DestroyItem(item); m_Items.RemoveAt(i); continue;
                 }
-                item.gameObject.SetActive(person.trackingConfidence >= .08f);
-                if (person.trackingConfidence < .08f) continue;
-                Vector2 viewport = TargetViewport(person, item.normalizedOffset);
+                bool validPerson = person != null && person.trackingConfidence >= .08f;
+                if (item.wheelFlight && item.attached && person == null)
+                { DestroyItem(item); m_Items.RemoveAt(i); continue; }
+                if (item.attached && !validPerson) { item.gameObject.SetActive(false); continue; }
+                item.gameObject.SetActive(item.wheelFlight || validPerson);
+                if (!item.wheelFlight && !validPerson) continue;
+                if (item.wheelFlight && !validPerson) item.personId = -1;
+                Vector2 viewport = validPerson ? TargetViewport(person, item.normalizedOffset) : item.targetViewport;
+                item.targetViewport = viewport;
                 Vector3 target = LocalPoint(viewport, PersonLayerDepth);
+                if (item.wheelFlight && item.flightProgress >= 1f && !item.attached)
+                {
+                    item.missAge += Mathf.Max(0f, deltaTime);
+                    float age = Mathf.Clamp01(item.missAge / .60f);
+                    item.gameObject.transform.localPosition = target + (target - item.startLocal).normalized * age * 2.4f;
+                    item.gameObject.transform.localScale = Vector3.one * ProjectileVisualScale * (1f - age) * (1f - age);
+                    if (age >= 1f) { DestroyItem(item); m_Items.RemoveAt(i); }
+                    continue;
+                }
                 if (!item.attached)
                 {
                     float remainingFlight = (1f - item.flightProgress) * FlightSeconds;
                     item.flightProgress = Mathf.Min(1f, item.flightProgress + deltaTime / FlightSeconds);
                     float t = item.flightProgress;
-                    item.gameObject.transform.localPosition = Vector3.Lerp(item.startLocal, target, t) +
-                        Vector3.up * Mathf.Sin(t * Mathf.PI) * .18f;
-                    if (t >= 1f)
+                    item.gameObject.transform.localPosition = FlightPoint(item.startLocal, target, t, item.wheelFlight);
+                    if (t >= 1f && validPerson)
                     {
                         item.attached = true;
                         item.impactAge = Mathf.Max(0f, deltaTime - remainingFlight);
+                        InteractionConfirmed?.Invoke(new PersonInteractionHit(item.personId, item.actionId,
+                            viewport, item.eventId, item.context));
                     }
                 }
                 else item.impactAge += Mathf.Max(0f, deltaTime);
@@ -374,12 +495,14 @@ namespace EarthOL.BodyThrow
             return entry != null;
         }
 
-        void CancelGesture() { m_PointerHeld = false; m_PickerOpen = false; }
+        public void CancelGesture() { m_PointerHeld = false; m_PickerOpen = false; }
 
         void DestroyItem(ThrownItem item)
         {
-            if (item?.gameObject == null) return;
-            DestroyOwned(item.gameObject);
+            if (item == null) return;
+            if (item.gameObject != null) DestroyOwned(item.gameObject);
+            item.releaseVisualAssets?.Invoke();
+            item.releaseVisualAssets = null;
         }
 
         static void DestroyOwned(Object value)

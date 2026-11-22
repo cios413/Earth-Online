@@ -1,5 +1,6 @@
 using EarthOL.BodyThrow;
 using EarthOL.Deform;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace EarthOL.ARCore
@@ -20,13 +21,135 @@ namespace EarthOL.ARCore
         bool m_RegionReady;
         bool m_PointerHeld;
         int m_PointerId;
+        sealed class ImpactSurface
+        {
+            public GameObject root;
+            public PokeWarpDeformer warp;
+            public Renderer renderer;
+            public int personId;
+            public Vector2 offset;
+            public float radiusPixels;
+            public float started;
+        }
+        readonly List<ImpactSurface> m_Impacts = new List<ImpactSurface>(4);
+        public int ActiveImpactCount
+        {
+            get { int count = 0; foreach (var impact in m_Impacts) if (impact.root.activeSelf) count++; return count; }
+        }
+
+        /// <summary>Small independent camera regions reuse the original spring for simultaneous person impacts.</summary>
+        public bool PlayLocalImpact(int personId, Vector2 viewportPoint)
+        {
+            var person = m_PersonTracking != null ? m_PersonTracking.Find(personId) : null;
+            if (person == null || person.trackingConfidence < .08f || m_Warp == null) return false;
+            ImpactSurface effect = null;
+            foreach (var candidate in m_Impacts) if (!candidate.root.activeSelf) { effect = candidate; break; }
+            if (effect == null && m_Impacts.Count < 4)
+            {
+                var root = new GameObject("Local person impact");
+                root.transform.SetParent(m_Camera.transform, false);
+                root.layer = 2;
+                root.SetActive(false);
+                var warp = root.AddComponent<PokeWarpDeformer>();
+                warp.planeInXZ = false; warp.createCollider = false; warp.lockPokesToSurface = true;
+                warp.gridX = 24; warp.gridY = 24;
+                warp.warpMaterial = m_Warp.warpMaterial;
+                warp.stretchAmount = m_Warp.stretchAmount; warp.bulgeAmount = m_Warp.bulgeAmount;
+                warp.frequency = m_Warp.frequency; warp.dampingRatio = m_Warp.dampingRatio; warp.logPokes = false;
+                warp.Initialize();
+                var renderer = root.GetComponent<Renderer>();
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+                effect = new ImpactSurface { root = root, warp = warp, renderer = renderer };
+                m_Impacts.Add(effect);
+            }
+            if (effect == null)
+            {
+                effect = m_Impacts[0];
+                foreach (var candidate in m_Impacts) if (candidate.started < effect.started) effect = candidate;
+            }
+            effect.warp.ResetPokes();
+            effect.personId = personId;
+            effect.offset = new Vector2((viewportPoint.x - person.screenRect.xMin) / person.screenRect.width,
+                (viewportPoint.y - person.screenRect.yMin) / person.screenRect.height);
+            effect.radiusPixels = Mathf.Clamp(person.screenRect.height * m_Camera.pixelHeight * .085f,
+                m_Camera.pixelHeight * .008f, m_Camera.pixelHeight * .042f);
+            effect.started = Time.unscaledTime;
+            effect.root.SetActive(true);
+            PlaceImpact(effect, person);
+            const int pointer = int.MinValue + 1;
+            effect.warp.BeginAt(pointer, effect.root.transform.position);
+            effect.warp.OnPokeEnd(pointer);
+            effect.renderer.enabled = true;
+            return true;
+        }
+
+        void PlaceImpact(ImpactSurface effect, PersonPoseData person)
+        {
+            Vector2 center = person.screenRect.min + Vector2.Scale(person.screenRect.size, effect.offset);
+            float depth = m_DistanceEstimator.Estimate(person, out _);
+            Vector3 world = m_Camera.ViewportToWorldPoint(new Vector3(center.x, center.y, depth));
+            Vector3 edge = m_Camera.ScreenToWorldPoint(new Vector3(
+                m_Camera.pixelRect.xMin + center.x * m_Camera.pixelWidth + effect.radiusPixels,
+                m_Camera.pixelRect.yMin + center.y * m_Camera.pixelHeight, depth));
+            float radius = Vector3.Distance(world, edge);
+            effect.root.transform.SetPositionAndRotation(world, m_Camera.transform.rotation * Quaternion.Euler(0, 180, 0));
+            effect.warp.SetPlaneSize(radius * 5f, radius * 5f);
+            effect.warp.pokeRadius = radius;
+        }
+
+        public void UpdateLocalImpacts()
+        {
+            foreach (var effect in m_Impacts)
+            {
+                if (!effect.root.activeSelf) continue;
+                var person = m_PersonTracking.Find(effect.personId);
+                if (person == null || !effect.warp.HasActivePokes) { effect.root.SetActive(false); continue; }
+                PlaceImpact(effect, person);
+                effect.renderer.enabled = person.trackingConfidence >= .08f;
+            }
+        }
 
         public Rect Region => m_Region;
         public PokeWarpDeformer Warp => m_Warp;
+        public bool ReadPointerInput { get; set; } = true;
+
+        /// <summary>Explicit effect command for input adapters; uses the existing spring unchanged.</summary>
+        public bool PulseAt(int personId, Vector2 screenPosition, Vector2 direction)
+        {
+            var person = m_PersonTracking != null ? m_PersonTracking.Find(personId) : null;
+            if (person == null || person.trackingConfidence < .2f || !TryGetRegion(person, out var region)) return false;
+            EndPointer();
+            m_FocusedPersonId = personId;
+            m_Region = region;
+            m_RegionReady = true;
+            ApplyScreenRegion(m_DistanceEstimator.Estimate(person, out _));
+            const int effectPointer = int.MinValue;
+            Vector3 start = PointOnSurface(screenPosition);
+            m_Warp.BeginAt(effectPointer, start);
+            if (direction.sqrMagnitude > .01f)
+                m_Warp.DragAt(effectPointer, PointOnSurface(screenPosition + direction.normalized * Mathf.Min(Screen.width, Screen.height) * .035f));
+            m_Warp.OnPokeEnd(effectPointer);
+            m_Renderer.enabled = true;
+            return true;
+        }
+
+        public IPersonModelDeformation CreateModelDeformation(GameObject model)
+        {
+            if (m_Warp == null || model == null) return null;
+            var filter = model.GetComponent<MeshFilter>();
+            var renderer = model.GetComponent<Renderer>();
+            if (filter == null || filter.sharedMesh == null || renderer == null) return null;
+            var adapter = model.AddComponent<PersonModelDeformation>();
+            adapter.Configure(m_Warp, renderer, filter.sharedMesh.bounds);
+            return adapter;
+        }
 
         public void ResetEffects()
         {
+            foreach (var impact in m_Impacts) impact.root.SetActive(false);
             EndPointer();
+            if (m_Warp != null) m_Warp.ResetPokes();
             m_FocusedPersonId = -1;
             m_Region = default;
             m_RegionReady = false;
@@ -81,8 +204,10 @@ namespace EarthOL.ARCore
         private void LateUpdate()
         {
             if (m_Warp == null || m_Camera == null) return;
+            UpdateLocalImpacts();
             RefreshRegion(Time.unscaledDeltaTime);
-            bool hasFrame = BodyPointerFrame.TryRead(out var frame);
+            BodyPointerFrame frame = default;
+            bool hasFrame = ReadPointerInput && !ARCoreModeOverlay.WheelTapToThrowEnabled && BodyPointerFrame.TryRead(out frame);
             if (ARCoreModeOverlay.BlocksWorldInput)
             {
                 EndPointer();
@@ -141,7 +266,7 @@ namespace EarthOL.ARCore
             PersonPoseData best = null;
             var persons = m_PersonTracking.Persons;
             for (int i = 0; i < persons.Count; i++)
-                if (persons[i].trackingConfidence > 0.2f && (best == null || persons[i].trackingConfidence > best.trackingConfidence))
+                if (persons[i].trackingConfidence > .2f && (best == null || persons[i].trackingConfidence > best.trackingConfidence))
                     best = persons[i];
             return best;
         }
@@ -224,6 +349,8 @@ namespace EarthOL.ARCore
 
         private void OnDestroy()
         {
+            foreach (var impact in m_Impacts)
+                if (impact.root != null) { if (Application.isPlaying) Destroy(impact.root); else DestroyImmediate(impact.root); }
             if (m_Surface == null) return;
             if (Application.isPlaying) Destroy(m_Surface);
             else DestroyImmediate(m_Surface);
