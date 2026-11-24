@@ -48,6 +48,14 @@ namespace EarthOL.ARCore
 
         private IEnumerator Start()
         {
+            var account = EarthOL.Account.AccountUIController.Create(() => SessionActive, ReturnToSelection);
+            var ready = account.WaitUntilReadyAsync();
+            while (!ready.IsCompleted) yield return null;
+            if (ready.IsFaulted || ready.IsCanceled)
+            {
+                Debug.LogException(ready.Exception);
+                yield break;
+            }
             m_Overlay = new GameObject("ARCore Mode Overlay").AddComponent<ARCoreModeOverlay>();
             m_Overlay.Configure(this);
             while (!m_EntryRequested) yield return null;
@@ -74,6 +82,7 @@ namespace EarthOL.ARCore
             PersonDeformer.enabled = false;
             CombatController = gameObject.AddComponent<PersonCombatController>();
             CombatController.Configure(ARCamera, PersonTracking, PersonDeformer, ThrowController, swipeDeform);
+            CartoonCanvas.PersonStickerDisplayed += OnPersonStickerDisplayed;
             CombatController.Defeated += OnPersonDefeated;
             CombatController.RoundRestarted += OnRoundRestarted;
             CombatController.ContinueOtherPersons += OnContinueOtherPersons;
@@ -237,6 +246,13 @@ namespace EarthOL.ARCore
             if (SessionActive && SelectedAppMode == AppMode.Combat && PersonTracking.Find(round.PersonId) != null &&
                 !CartoonCanvas.IsPersonActivated(round.PersonId))
                 CartoonCanvas.ActivatePerson(round.PersonId, PersonStickerSkinCatalog.DefaultSkinId);
+            if (CartoonCanvas.IsPersonStickerVisible(round.PersonId)) OnPersonStickerDisplayed(round.PersonId);
+        }
+
+        void OnPersonStickerDisplayed(int personId)
+        {
+            if (SessionActive && SelectedAppMode == AppMode.Combat)
+                CombatController.CaptureDefeatedPersonSticker(personId,SessionVersion);
         }
 
         void OnRoundRestarted(int personId) => CartoonCanvas.DeactivatePerson(personId);
@@ -298,6 +314,7 @@ namespace EarthOL.ARCore
 
         private void OnDestroy()
         {
+            if (CartoonCanvas != null) CartoonCanvas.PersonStickerDisplayed -= OnPersonStickerDisplayed;
             if (CombatController != null)
             {
                 CombatController.Defeated -= OnPersonDefeated;

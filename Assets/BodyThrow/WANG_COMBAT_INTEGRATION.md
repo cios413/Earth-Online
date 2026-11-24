@@ -2,7 +2,7 @@
 
 Source: <https://github.com/cios413/Earth-Online/tree/wang>, commit `fe4947f` (including `db636fa`, `369ffef`, `c905cba`, `75e0079`, and `fe4947f`).
 
-The following runtime implementations are copied from that branch without rewriting their behavior:
+The following runtime implementations originate from that branch:
 
 | Source file | Reused behavior |
 | --- | --- |
@@ -14,6 +14,12 @@ The following runtime implementations are copied from that branch without rewrit
 | `Assets/Shaders/PersonWarp.shader` | Person-masked shear rendering |
 
 `ARCoreMainSceneBootstrap` also reuses wang's session marker policy, input policy and deferred recognition restart when continuing to another target. The current sticker skin picker cleanup and default combat skull selection remain connected. `Cartoon2DCanvas.DrawPersonMarkers`, `BodyProjectileCatalog.Entry.canHold`, the StickyHand catalog flag, and `Person3DThrowController.SelectedEntry` are the same small additions from wang, applied without replacing this project's alien skins or DreamGrenade entry.
+
+## Smooth deformation rendering adjustment
+
+The imported body mask previously multiplied the combined press and swipe vertex displacement. This could produce visible polygon edges around narrow limbs. Ordinary press/impulse vertices now use the original pre-import deformation formula without the body mask. Only the directional swipe image offset is masked, evaluated per pixel when sampling the camera grab; moving the contour no longer folds the coarse mesh at its boundary. Its feather is supplied from the person region's size/grid spacing and uses pixel derivatives for antialiasing. The region border retains the original smooth falloff. The imported swipe spring, direction, strength, tilt, attack detection, health and cooldown rules remain in use. Final zero amplitude and reset clear the renderer's swipe displacement and tilt.
+
+`SwipeDeformationValidation.Validate` checks that press output is pixel-identical with/without a body mask; swipe remains visible and consistent across 48x64 and 4x4 meshes; feather width changes the actual rendered transition; outside pixels and the fully recovered image stay unchanged. Preview output is written to the temporary `opencode/SmoothPressSwipePreview.png`.
 
 ## Resulting controls
 

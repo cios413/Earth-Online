@@ -91,7 +91,12 @@ namespace EarthOL.EditorTools
                 var shaderBlock = new MaterialPropertyBlock(); surface.Warp.GetComponent<Renderer>().GetPropertyBlock(shaderBlock);
                 Check(shaderBlock.GetFloat("_BodyPartCount") == 10 && Mathf.Abs(shaderBlock.GetFloat("_SwipeAmp")) > 0,
                     "Imported body mask and swipe amplitude reach the renderer");
+                Check(shaderBlock.GetFloat("_BodyFeather") > 0, "Adaptive swipe feather reaches the renderer");
                 Check(!ShaderUtil.ShaderHasError(surface.Warp.warpMaterial.shader), "Person warp shader compiles with imported shear and body mask");
+                surface.ResetEffects(); surface.Warp.GetComponent<Renderer>().GetPropertyBlock(shaderBlock);
+                Check(!surface.Warp.HasActiveSwipeShear && shaderBlock.GetFloat("_SwipeAmp") == 0 &&
+                    (Quaternion)Get(surface, "m_SwipeTilt") == Quaternion.identity,
+                    "Reset removes active directional push and tilt immediately");
                 combat.RestartRound(target); round = combat.FindRound(target);
                 wheel.SetExpanded(true);
                 int sticky = Array.FindIndex(catalog.entries, entry => entry.key == "StickyHand");

@@ -137,6 +137,7 @@ namespace EarthOL.ARCore
         void OnGUI()
         {
             if (m_Bootstrap == null) return;
+            if (EarthOL.Account.AccountUIController.BlocksGameUi) return;
             if (!m_Bootstrap.SessionActive) { DrawEntry(); return; }
             bool presenting = IsShowingShowcase;
             if (presenting) DrawShowcaseBackground();

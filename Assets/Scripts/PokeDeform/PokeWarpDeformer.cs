@@ -100,6 +100,7 @@ namespace EarthOL.Deform
         readonly Vector4[] m_BodyPartsCache = new Vector4[10];
         readonly float[] m_BodyRadiusCache = new float[10];
         int m_BodyCount;
+        float m_BodyFeather = .05f;
 
         static readonly int[] s_PosIds =
         {
@@ -124,6 +125,7 @@ namespace EarthOL.Deform
         static readonly int s_BodyPartsId = Shader.PropertyToID("_BodyParts");
         static readonly int s_BodyRadiusId = Shader.PropertyToID("_BodyRadius");
         static readonly int s_BodyCountId = Shader.PropertyToID("_BodyPartCount");
+        static readonly int s_BodyFeatherId = Shader.PropertyToID("_BodyFeather");
 
         void Awake()
         {
@@ -380,8 +382,12 @@ namespace EarthOL.Deform
         /// <summary>设置挥扫的方向性横向剪切（localDir 为面内局部方向，amp 为幅度）。</summary>
         public void SetSwipeShear(Vector2 localDir, float amp)
         {
+            Vector2 previousDirection = m_SwipeDir;
             if (localDir.sqrMagnitude > 1e-6f) m_SwipeDir = localDir.normalized;
+            bool changed = m_SwipeDir != previousDirection || !Mathf.Approximately(m_SwipeAmp, amp);
             m_SwipeAmp = amp;
+            // In particular, send the final zero even when there are no active pokes.
+            if (changed) PushToShader(true);
         }
 
         public struct BodySegment
@@ -392,7 +398,7 @@ namespace EarthOL.Deform
             public BodySegment(Vector2 a, Vector2 b, float radius) { this.a = a; this.b = b; this.radius = radius; }
         }
 
-        /// <summary>设置人形胶囊段（局部空间），供着色器在顶点阶段计算形变 mask。</summary>
+        /// <summary>人形胶囊段与柔边（局部空间），仅供挥扫的逐像素采样遮罩使用。</summary>
         public void SetBodyMask(BodySegment[] segments, float feather)
         {
             m_BodySegments = segments ?? new BodySegment[0];
@@ -412,6 +418,7 @@ namespace EarthOL.Deform
                 }
             }
             m_BodyCount = count;
+            m_BodyFeather = Mathf.Max(.0001f, feather);
         }
 
         public void SetPlaneSize(float width, float height)
@@ -552,6 +559,7 @@ namespace EarthOL.Deform
             m_Block.SetVectorArray(s_BodyPartsId, m_BodyPartsCache);
             m_Block.SetFloatArray(s_BodyRadiusId, m_BodyRadiusCache);
             m_Block.SetFloat(s_BodyCountId, m_BodyCount);
+            m_Block.SetFloat(s_BodyFeatherId, m_BodyFeather);
 
             m_Renderer.SetPropertyBlock(m_Block);
             m_WasActive = anyActive;

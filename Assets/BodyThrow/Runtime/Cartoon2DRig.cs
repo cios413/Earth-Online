@@ -28,6 +28,16 @@ namespace EarthOL.BodyThrow
         public JellySkeletonPalette Palette => m_Palette;
         public CartoonJellyShell JellyShell => m_Jelly;
         public bool HasJellyAntennae => m_JellyAntennae;
+        public bool HasVisibleArtwork
+        {
+            get
+            {
+                if (!gameObject.activeInHierarchy) return false;
+                if (m_Head != null && m_Head.IsVisible || m_Torso != null && m_Torso.IsVisible) return true;
+                foreach (var part in m_Parts) if (part.visual != null && part.visual.IsVisible) return true;
+                return false;
+            }
+        }
 
         public void Configure(int personId, Transform parent, Sprite bodySprite, Sprite headSprite,
             Sprite torsoSprite = null, Sprite pairedBoneSprite = null)

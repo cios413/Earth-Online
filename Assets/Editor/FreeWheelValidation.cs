@@ -19,6 +19,7 @@ namespace EarthOL.EditorTools
             CombatIntegrationValidation.Validate();
             PersonStickerSkinValidation.Validate();
             WangCombatReuseValidation.Validate();
+            SwipeDeformationValidation.Validate();
             ValidateInteraction(AppMode.Free);
             ValidateInteraction(AppMode.Combat);
             ValidateBattleWheel();

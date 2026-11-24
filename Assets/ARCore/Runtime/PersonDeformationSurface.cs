@@ -176,6 +176,7 @@ namespace EarthOL.ARCore
 
         public void ResetEffects()
         {
+            GetComponent<SwipeDeformController>()?.ResetEffects();
             foreach (var impact in m_Impacts) impact.root.SetActive(false);
             EndPointer();
             if (m_Warp != null) m_Warp.ResetPokes();
@@ -341,8 +342,11 @@ namespace EarthOL.ARCore
                 }
             }
 
-            if (segments.Count > 0)
-                m_Warp.SetBodyMask(segments.ToArray(), 0.05f);
+            float gridSpacing = Mathf.Max(m_Warp.planeWidth / Mathf.Max(1, m_Warp.gridX),
+                m_Warp.planeHeight / Mathf.Max(1, m_Warp.gridY));
+            float feather = Mathf.Max(gridSpacing * 3f, Mathf.Min(m_Warp.planeWidth, m_Warp.planeHeight) * .06f);
+            // Upload an empty mask too, so a lost/missing pose cannot reuse old limbs.
+            m_Warp.SetBodyMask(segments.ToArray(), feather);
         }
 
         Vector2 KeypointToLocal(Vector2 viewportPoint)

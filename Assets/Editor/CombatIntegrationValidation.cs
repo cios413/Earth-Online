@@ -37,7 +37,7 @@ namespace EarthOL.EditorTools
                 Check(!left.TryApply(hit,attack,combo,damage,1.1f,1f,out _),"Duplicate event cannot apply twice");
                 Check(!right.TryApply(hit,attack,combo,damage,1.1f,1f,out _) && right.CurrentHealth==120f,"Damage is isolated by person and round");
                 Check(left.TryApply(new PersonInteractionHit(1,"press",Vector2.zero,2,11),attack,combo,damage,1.2f,0f,out var critical) &&
-                    critical.Critical && Mathf.Abs(critical.FinalDamage-18.75f)<.001f,"Second hit combines wang 1.25 combo and 1.5 critical multipliers");
+                    critical.Critical && Mathf.Abs(critical.FinalDamage-15f)<.001f,"Second hit uses the initial combo multiplier and 1.5 critical multiplier");
                 left.Tick(6f,combo);
                 Check(left.ComboCount==0 && left.BestCombo==2,"Combo timeout resets the active combo, retaining round statistics");
                 var replacement = new CombatRound(1,13,60);

@@ -27,6 +27,18 @@ namespace EarthOL.ARCore
 
         public void Configure(PersonDeformationSurface surface) => deformer = surface;
 
+        public void ResetEffects()
+        {
+            m_ShearAmp = m_ShearVelocity = 0f;
+            m_TiltEuler = m_TiltVelocity = Vector3.zero;
+            m_Active = false;
+            if (deformer == null) return;
+            deformer.Warp?.SetSwipeShear(m_ShearDir, 0f);
+            deformer.SetSwipeTransform(Vector3.zero, Quaternion.identity);
+        }
+
+        void OnDisable() => ResetEffects();
+
         public void Trigger(Vector2 swipeScreenDirection, float speedPixelsPerSecond, Vector2 impactScreenPoint)
         {
             if (deformer == null || deformer.Warp == null) return;
