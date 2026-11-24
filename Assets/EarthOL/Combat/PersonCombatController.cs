@@ -14,6 +14,7 @@ namespace EarthOL.Combat
         PersonTrackingManager m_Tracking;
         PersonDeformationSurface m_Surface;
         Person3DThrowController m_Thrower;
+        SwipeDeformController m_SwipeDeform;
         BodyProjectileCatalog m_Catalog;
         ComboConfig m_Combo;
         AttackDamageConfig m_Damage;
@@ -28,7 +29,7 @@ namespace EarthOL.Combat
         CombatRound m_Result;
         GameMode m_Feature;
         bool m_Active, m_Pressed, m_Swiping, m_Holding, m_Settings;
-        int m_Pointer, m_PressPerson = -1, m_NextToken, m_Session, m_HealthTier = 1;
+        int m_Pointer, m_PressPerson = -1, m_NextToken, m_Session, m_HealthTier = 1, m_SelectedPersonId = -1;
         Vector2 m_Origin, m_Previous, m_HoldPoint;
         float m_PressTime, m_FeedbackUntil;
         string m_Feedback;
@@ -41,23 +42,26 @@ namespace EarthOL.Combat
         public bool Active => m_Active;
         public bool BlocksInput => m_Active && (m_Settings || m_Result != null);
         public bool Holding => m_Holding;
+        public bool CanHoldSelectedItem => m_Thrower != null && m_Thrower.SelectedEntry != null && m_Thrower.SelectedEntry.canHold;
+        public bool IsSelecting => m_Active && m_SelectedPersonId < 0;
+        public int SelectedPersonId => m_SelectedPersonId;
         public int Session => m_Session;
         public IReadOnlyDictionary<int, CombatRound> Rounds => m_Rounds;
         public event Action<AttackOutcome> AttackResolved;
         public event Action<CombatRound> Defeated;
         public event Action<int> RoundRestarted;
+        public event Action ContinueOtherPersons;
 
         public void Configure(Camera camera, PersonTrackingManager tracking,
-            PersonDeformationSurface surface, Person3DThrowController thrower)
+            PersonDeformationSurface surface, Person3DThrowController thrower, SwipeDeformController swipeDeform)
         {
-            m_Camera = camera; m_Tracking = tracking; m_Surface = surface; m_Thrower = thrower;
+            m_Camera = camera; m_Tracking = tracking; m_Surface = surface; m_Thrower = thrower; m_SwipeDeform = swipeDeform;
             m_Catalog = Resources.Load<BodyProjectileCatalog>("Throwables/Catalog");
             m_Config = Resources.Load<CombatConfig>("Combat/CombatConfig");
             m_Combo = m_Config != null && m_Config.comboConfig != null ? m_Config.comboConfig : Own<ComboConfig>();
             m_Damage = m_Config != null && m_Config.attackDamageConfig != null ? m_Config.attackDamageConfig : Own<AttackDamageConfig>();
             Register("press", "按压", "", 10f);
             Register("swipe", "挥扫", "", 8f);
-            Register("StickyHandHold", "拍打", "粘粘手", 12f);
             if (m_Catalog != null && m_Catalog.entries != null)
                 foreach (var entry in m_Catalog.entries)
                     if (entry != null && !string.IsNullOrEmpty(entry.key))
@@ -94,6 +98,7 @@ namespace EarthOL.Combat
         {
             CancelGesture();
             m_Holding = false;
+            m_SelectedPersonId = -1;
             m_Rounds.Clear(); m_Result = null; m_Results.Clear(); m_Settings = false;
             m_Feedback = null; m_FeedbackUntil = 0;
             if (m_Thrower != null) m_Thrower.CancelGesture();
@@ -112,9 +117,11 @@ namespace EarthOL.Combat
 
         void ApplyInputPolicy()
         {
-            if (m_Surface != null) m_Surface.ReadPointerInput = !m_Active || m_Feature == GameMode.Deform;
+            if (m_Surface != null) m_Surface.ReadPointerInput = !m_Active || (!m_Holding && m_Feature == GameMode.Deform && !IsSelecting);
             if (m_Thrower != null) m_Thrower.ReadPointerInput = false;
         }
+
+        public void RefreshInputPolicy() => ApplyInputPolicy();
 
         float NewRoundHealth()
         {
@@ -127,7 +134,7 @@ namespace EarthOL.Combat
 
         public int CaptureRound(int personId)
         {
-            if (!m_Active || m_Tracking == null) return 0;
+            if (!m_Active || m_Tracking == null || m_SelectedPersonId < 0 || personId != m_SelectedPersonId) return 0;
             var person = m_Tracking.Find(personId);
             if (person == null || !person.IsValid || person.trackingConfidence < .2f) return 0;
             if (!m_Rounds.TryGetValue(personId, out var round))
@@ -136,6 +143,16 @@ namespace EarthOL.Combat
                 m_Rounds.Add(personId, round);
             }
             return round.Defeated ? 0 : round.Token;
+        }
+
+        public void SelectPerson(int personId)
+        {
+            if (!m_Active || m_Tracking == null || m_SelectedPersonId >= 0) return;
+            var person = m_Tracking.Find(personId);
+            if (person == null || !person.IsValid || person.trackingConfidence < .2f) return;
+            m_SelectedPersonId = personId;
+            CaptureRound(personId);
+            ApplyInputPolicy();
         }
 
         public bool Confirm(PersonInteractionHit hit) => Confirm(hit, false);
@@ -183,80 +200,86 @@ namespace EarthOL.Combat
             m_Expired.Clear();
             foreach (var pair in m_Rounds) if (m_Tracking.Find(pair.Key) == null) m_Expired.Add(pair.Key);
             foreach (int id in m_Expired) m_Rounds.Remove(id);
-            foreach (var person in m_Tracking.Persons) CaptureRound(person.personId);
+            if (m_SelectedPersonId >= 0) CaptureRound(m_SelectedPersonId);
         }
 
         public void ProcessPointer(BodyPointerFrame frame)
         {
-            if (!m_Active || BlocksInput || ARCoreModeOverlay.WheelControlsPersonInput || ARCoreModeOverlay.IsProjectilePickerOpen ||
+            if (!m_Active || BlocksInput || (ARCoreModeOverlay.WheelTapToThrowEnabled && !m_Holding && !IsSelecting) || ARCoreModeOverlay.IsProjectilePickerOpen ||
                 m_Tracking == null || m_Camera == null) { CancelGesture(); return; }
+
+            if (m_Holding)
+            {
+                m_HoldPoint = frame.position;
+                if (!m_Pressed) { m_Pressed = true; m_Pointer = frame.id; m_Previous = frame.position; }
+                if (frame.id != m_Pointer) return;
+                if (frame.canceled) { CancelGesture(); SetHolding(false); return; }
+                if (frame.held || frame.released) Sweep(m_Previous, frame.position, true);
+                m_Previous = frame.position;
+                if (frame.released) { CancelGesture(); SetHolding(false); }
+                return;
+            }
+
             if (frame.down)
             {
                 CancelGesture();
                 if (m_UiFrame == Time.frameCount || ARCoreModeOverlay.IsPointOnOverlay(frame.position)) return;
-                if (m_Feature != GameMode.Deform && !(m_Feature == GameMode.Throw && m_Holding)) return;
+                if (m_Feature != GameMode.Deform) return;
                 m_Pressed = true; m_Pointer = frame.id; m_Origin = m_Previous = frame.position;
                 m_PressTime = Time.unscaledTime;
                 var person = Pick(frame.position);
                 m_PressPerson = person != null ? person.personId : -1;
-                if (!m_Holding && m_PressPerson >= 0)
-                {
-                    m_Surface.RefreshRegion(0f);
-                    m_Surface.TryBegin(frame.id, frame.position);
-                }
                 return;
             }
             if (!m_Pressed || frame.id != m_Pointer) return;
             if (frame.canceled || ARCoreModeOverlay.IsPointOnOverlay(frame.position)) { CancelGesture(); return; }
-            if (m_Holding)
-            {
-                m_HoldPoint = frame.position;
-                if (frame.held || frame.released) Sweep(m_Previous, frame.position, true);
-            }
-            else if (Vector2.Distance(frame.position, m_Origin) > SwipeThreshold || m_Swiping)
+            if (Vector2.Distance(frame.position, m_Origin) > SwipeThreshold || m_Swiping)
             {
                 if (!m_Swiping) m_Surface.EndPointer();
                 Vector2 from = m_Swiping ? m_Previous : m_Origin;
                 m_Swiping = true;
                 Sweep(from, frame.position, false);
             }
-            else if (frame.held) m_Surface.Warp.DragAt(frame.id, WorldPoint(frame.position));
             m_Previous = frame.position;
             if (!frame.released) return;
-            if (!m_Holding && !m_Swiping && Time.unscaledTime - m_PressTime < .5f)
+            if (!m_Swiping && Time.unscaledTime - m_PressTime < .5f)
             {
                 var person = Pick(frame.position);
                 if (person != null && person.personId == m_PressPerson)
-                    Report(person.personId, "press", ToViewport(frame.position));
+                {
+                    if (m_SelectedPersonId < 0) SelectPerson(person.personId);
+                    else Report(person.personId, "press", ToViewport(frame.position));
+                }
             }
             CancelGesture();
-        }
-
-        Vector3 WorldPoint(Vector2 screen)
-        {
-            var warp = m_Surface.Warp;
-            var ray = m_Camera.ScreenPointToRay(screen);
-            return new Plane(warp.transform.forward, warp.transform.position).Raycast(ray, out float distance)
-                ? ray.GetPoint(distance) : warp.transform.position;
         }
 
         public int Sweep(Vector2 fromScreen, Vector2 toScreen, bool holding)
         {
             int count = 0;
             Vector2 from = ToViewport(fromScreen), to = ToViewport(toScreen);
+            Vector2 screenDelta = toScreen - fromScreen;
+            Vector2 direction = screenDelta.sqrMagnitude > 1e-6f ? screenDelta.normalized : Vector2.right;
+            float speed = screenDelta.magnitude / Mathf.Max(0.0001f, Time.unscaledDeltaTime);
             foreach (var person in m_Tracking.Persons)
             {
+                if (person.personId != m_SelectedPersonId) continue;
                 if (person.trackingConfidence < .2f || !SegmentRect(from, to, person.screenRect, out var point)) continue;
                 if (holding)
                 {
+                    if (person.screenRect.Contains(from)) continue;
                     if (m_HoldHits.TryGetValue(person.personId, out float last) && Time.unscaledTime - last < HoldInterval) continue;
                     m_HoldHits[person.personId] = Time.unscaledTime;
                 }
                 else if (!m_GestureHits.Add(person.personId)) continue;
-                if (Report(person.personId, holding ? "StickyHandHold" : "swipe", point))
+                if (Report(person.personId, "swipe", point))
                 {
                     count++;
-                    m_Surface.PulseAt(person.personId, m_Camera.ViewportToScreenPoint(point), toScreen - fromScreen);
+                    if (m_SwipeDeform != null)
+                    {
+                        m_Surface.FocusPerson(person.personId);
+                        m_SwipeDeform.Trigger(direction, speed, m_Camera.ViewportToScreenPoint(point));
+                    }
                 }
             }
             return count;
@@ -302,10 +325,11 @@ namespace EarthOL.Combat
         public void SetHolding(bool holding)
         {
             CancelGesture();
-            m_Holding = m_Active && m_Feature == GameMode.Throw && holding && m_Thrower.SelectedProjectileKey == "StickyHand";
+            m_Holding = m_Active && holding && m_Thrower != null && m_Thrower.SelectedProjectileKey == "StickyHand";
             m_Surface.enabled = m_Feature == GameMode.Deform || m_Holding;
             m_HoldPoint = new Vector2(Screen.width * .5f, Screen.height * .65f);
-            m_Thrower.CancelGesture(); ApplyInputPolicy();
+            if (m_Thrower != null) m_Thrower.CancelGesture();
+            ApplyInputPolicy();
         }
 
         public void RestartRound(int personId)
@@ -336,21 +360,28 @@ namespace EarthOL.Combat
                 alignment = TextAnchor.MiddleCenter, normal = { textColor = Color.white } };
             if (!presenting)
             {
-                foreach (var round in m_Rounds.Values) DrawHealth(round, text);
-                if (m_Feedback != null && Time.unscaledTime < m_FeedbackUntil)
+                if (IsSelecting) DrawSelection(text);
+                else
                 {
-                    Vector3 screen = m_Camera.ViewportToScreenPoint(m_FeedbackPoint);
-                    text.normal.textColor = m_FeedbackColor;
-                    float width = Mathf.Min(Screen.width * .85f, 650f);
-                    GUI.Label(new Rect(Mathf.Clamp(screen.x - width * .5f, 4f, Screen.width - width),
-                        Mathf.Clamp(Screen.height - screen.y - 70f, Screen.height * .15f, Screen.height * .75f), width, 65f), m_Feedback, text);
-                    text.normal.textColor = Color.white;
+                    foreach (var round in m_Rounds.Values) DrawHealth(round, text);
+                    if (m_Feedback != null && Time.unscaledTime < m_FeedbackUntil)
+                    {
+                        Vector3 screen = m_Camera.ViewportToScreenPoint(m_FeedbackPoint);
+                        text.normal.textColor = m_FeedbackColor;
+                        float width = Mathf.Min(Screen.width * .85f, 650f);
+                        GUI.Label(new Rect(Mathf.Clamp(screen.x - width * .5f, 4f, Screen.width - width),
+                            Mathf.Clamp(Screen.height - screen.y - 70f, Screen.height * .15f, Screen.height * .75f), width, 65f), m_Feedback, text);
+                        text.normal.textColor = Color.white;
+                    }
                 }
             }
             DrawControls(text);
             if (m_Holding && m_Pressed && m_Thrower.SelectedProjectilePreview != null)
-                GUI.DrawTexture(new Rect(m_HoldPoint.x - 65f, Screen.height - m_HoldPoint.y - 65f, 130f, 130f),
+            {
+                float heldSize = Mathf.Clamp(Screen.width * .13f, 96f, 190f);
+                GUI.DrawTexture(new Rect(m_HoldPoint.x - heldSize * .5f, Screen.height - m_HoldPoint.y - heldSize * .5f, heldSize, heldSize),
                     m_Thrower.SelectedProjectilePreview, ScaleMode.ScaleToFit, true);
+            }
             if (m_Settings || m_Result != null) DrawModal(text);
         }
 
@@ -369,6 +400,31 @@ namespace EarthOL.Combat
             GUI.color = old;
             GUI.Label(new Rect(rect.x, rect.y - 30f, rect.width, 30f),
                 "人物 " + round.PersonId + "  " + round.CurrentHealth.ToString("0") + "/" + round.MaxHealth.ToString("0"), text);
+        }
+
+        void DrawSelection(GUIStyle text)
+        {
+            foreach (var person in m_Tracking.Persons)
+            {
+                if (person.trackingConfidence < .2f) continue;
+                Vector3 vmin = m_Camera.ViewportToScreenPoint(new Vector3(person.screenRect.xMin, person.screenRect.yMin, 0));
+                Vector3 vmax = m_Camera.ViewportToScreenPoint(new Vector3(person.screenRect.xMax, person.screenRect.yMax, 0));
+                Rect box = Rect.MinMaxRect(
+                    Mathf.Min(vmin.x, vmax.x), Screen.height - Mathf.Max(vmin.y, vmax.y),
+                    Mathf.Max(vmin.x, vmax.x), Screen.height - Mathf.Min(vmin.y, vmax.y));
+                DrawBoxOutline(box, 3f, new Color(.35f, .78f, .72f, .9f));
+            }
+        }
+
+        void DrawBoxOutline(Rect rect, float thickness, Color color)
+        {
+            Color previous = GUI.color;
+            GUI.color = color;
+            GUI.DrawTexture(new Rect(rect.x, rect.y, rect.width, thickness), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(rect.x, rect.yMax - thickness, rect.width, thickness), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(rect.x, rect.y, thickness, rect.height), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(rect.xMax - thickness, rect.y, thickness, rect.height), Texture2D.whiteTexture);
+            GUI.color = previous;
         }
 
         void DrawControls(GUIStyle text)
@@ -403,7 +459,7 @@ namespace EarthOL.Combat
                 GUI.Label(new Rect(x, y + 170f, width, Screen.height * .22f), summary, text);
                 float by = Mathf.Min(Screen.height - ButtonHeight * 2.8f, y + Screen.height * .40f);
                 if (GUI.Button(new Rect(x, by, width * .48f, ButtonHeight), "继续其他人物", button))
-                { m_Result = null; m_UiFrame = Time.frameCount; }
+                { m_Result = null; m_UiFrame = Time.frameCount; ContinueOtherPersons?.Invoke(); }
                 if (GUI.Button(new Rect(x + width * .52f, by, width * .48f, ButtonHeight), "此人物重新开始", button))
                 { int person = m_Result.PersonId; m_Result = null; RestartRound(person); m_UiFrame = Time.frameCount; }
             }

@@ -21,6 +21,9 @@ namespace EarthOL.ARCore
         bool m_RegionReady;
         bool m_PointerHeld;
         int m_PointerId;
+        Vector3 m_SwipeOffset;
+        Quaternion m_SwipeTilt = Quaternion.identity;
+        float m_SurfaceDepth = 0.45f;
         sealed class ImpactSurface
         {
             public GameObject root;
@@ -134,6 +137,32 @@ namespace EarthOL.ARCore
             return true;
         }
 
+        /// <summary>让主 warp 面聚焦到指定人物，供挥扫攻击在多人场景下对准被攻击者。</summary>
+        public bool FocusPerson(int personId)
+        {
+            var person = m_PersonTracking != null ? m_PersonTracking.Find(personId) : null;
+            if (person == null || person.trackingConfidence < .2f || !TryGetRegion(person, out var region)) return false;
+            m_FocusedPersonId = personId;
+            m_Region = region;
+            m_RegionReady = true;
+            ApplyScreenRegion(m_DistanceEstimator != null ? m_DistanceEstimator.Estimate(person, out _) : 0.45f);
+            return true;
+        }
+
+        /// <summary>挥扫的方向性横向推开 + 倾斜（由 SwipeDeformController 的弹簧驱动）。</summary>
+        public void SetSwipeTransform(Vector3 offset, Quaternion tilt)
+        {
+            m_SwipeOffset = offset;
+            m_SwipeTilt = tilt;
+        }
+
+        /// <summary>挥扫命中点的局部冲击 poke（与按压的径向凹陷区分）。</summary>
+        public void SwipePokeAt(Vector2 screenPosition, float strength)
+        {
+            if (m_Warp == null || m_Camera == null) return;
+            m_Warp.ImpulsePoke(PointOnSurface(screenPosition), strength);
+        }
+
         public IPersonModelDeformation CreateModelDeformation(GameObject model)
         {
             if (m_Warp == null || model == null) return null;
@@ -206,6 +235,7 @@ namespace EarthOL.ARCore
             if (m_Warp == null || m_Camera == null) return;
             UpdateLocalImpacts();
             RefreshRegion(Time.unscaledDeltaTime);
+            UpdateBodyMask();
             BodyPointerFrame frame = default;
             bool hasFrame = ReadPointerInput && !ARCoreModeOverlay.WheelTapToThrowEnabled && BodyPointerFrame.TryRead(out frame);
             if (ARCoreModeOverlay.BlocksWorldInput)
@@ -222,7 +252,7 @@ namespace EarthOL.ARCore
                 }
             }
             else if (m_PointerHeld) EndPointer();
-            m_Renderer.enabled = m_Surface.activeInHierarchy && m_Warp.HasActivePokes;
+            m_Renderer.enabled = m_Surface.activeInHierarchy && (m_Warp.HasActivePokes || m_Warp.HasActiveSwipeShear);
             if (m_DetectionManager != null) m_DetectionManager.SetInferencePaused(m_PointerHeld || m_Warp.HasActivePokes);
         }
 
@@ -271,6 +301,72 @@ namespace EarthOL.ARCore
             return best;
         }
 
+        PersonPoseData CurrentPerson()
+        {
+            if (m_PersonTracking == null) return null;
+            return m_FocusedPersonId >= 0 ? m_PersonTracking.Find(m_FocusedPersonId) : BestPerson();
+        }
+
+        void UpdateBodyMask()
+        {
+            var segments = new List<PokeWarpDeformer.BodySegment>();
+            var person = CurrentPerson();
+            if (person != null && m_Camera != null && m_Surface != null && m_Warp != null)
+            {
+                var pose = person.AsPoseView();
+                float aspect = (float)m_Camera.pixelWidth / Mathf.Max(1f, m_Camera.pixelHeight);
+
+                if (BodyPoseGeometry.TryFitHead(pose, aspect, out var headCenter, out var headRadius))
+                {
+                    Vector2 h = KeypointToLocal(headCenter);
+                    float hr = RadiusToLocal(headCenter, headRadius);
+                    segments.Add(new PokeWarpDeformer.BodySegment(h, h, hr * 0.9f));
+                }
+
+                if (BodyPoseGeometry.TryFitTorso(pose, aspect, out var shoulders, out var hips, out var torsoRadius))
+                {
+                    Vector2 s = KeypointToLocal(shoulders);
+                    Vector2 h = KeypointToLocal(hips);
+                    float tr = RadiusToLocal(shoulders, torsoRadius);
+                    segments.Add(new PokeWarpDeformer.BodySegment(s, h, tr * 0.85f));
+                    float limbR = tr * 0.5f;
+                    AddLimb(pose, segments, 5, 7, limbR);
+                    AddLimb(pose, segments, 7, 9, limbR * 0.8f);
+                    AddLimb(pose, segments, 6, 8, limbR);
+                    AddLimb(pose, segments, 8, 10, limbR * 0.8f);
+                    AddLimb(pose, segments, 11, 13, limbR * 1.1f);
+                    AddLimb(pose, segments, 13, 15, limbR * 0.9f);
+                    AddLimb(pose, segments, 12, 14, limbR * 1.1f);
+                    AddLimb(pose, segments, 14, 16, limbR * 0.9f);
+                }
+            }
+
+            if (segments.Count > 0)
+                m_Warp.SetBodyMask(segments.ToArray(), 0.05f);
+        }
+
+        Vector2 KeypointToLocal(Vector2 viewportPoint)
+        {
+            Vector3 world = m_Camera.ViewportToWorldPoint(new Vector3(viewportPoint.x, viewportPoint.y, m_SurfaceDepth));
+            Vector3 local = m_Surface.transform.InverseTransformPoint(world);
+            return new Vector2(local.x, local.y);
+        }
+
+        float RadiusToLocal(Vector2 center, float viewportRadius)
+        {
+            Vector2 c = KeypointToLocal(center);
+            Vector2 r = KeypointToLocal(center + Vector2.up * viewportRadius);
+            return Vector2.Distance(c, r);
+        }
+
+        void AddLimb(BodyPoseResult pose, List<PokeWarpDeformer.BodySegment> segments, int first, int second, float radius)
+        {
+            if (!BodyPoseGeometry.HasPoint(pose, first) || !BodyPoseGeometry.HasPoint(pose, second)) return;
+            Vector2 a = KeypointToLocal(pose.keypoints[first]);
+            Vector2 b = KeypointToLocal(pose.keypoints[second]);
+            segments.Add(new PokeWarpDeformer.BodySegment(a, b, radius));
+        }
+
         static bool TryGetRegion(PersonPoseData person, out Rect region)
         {
             region = default;
@@ -285,13 +381,15 @@ namespace EarthOL.ARCore
         void ApplyScreenRegion(float depth)
         {
             depth = Mathf.Max(m_Camera.nearClipPlane + 0.02f, depth);
+            m_SurfaceDepth = depth;
             Vector2 center = m_Region.center;
             Vector3 world = m_Camera.ViewportToWorldPoint(new Vector3(center.x, center.y, depth));
             float width = Vector3.Distance(m_Camera.ViewportToWorldPoint(new Vector3(m_Region.xMin, center.y, depth)),
                 m_Camera.ViewportToWorldPoint(new Vector3(m_Region.xMax, center.y, depth)));
             float height = Vector3.Distance(m_Camera.ViewportToWorldPoint(new Vector3(center.x, m_Region.yMin, depth)),
                 m_Camera.ViewportToWorldPoint(new Vector3(center.x, m_Region.yMax, depth)));
-            m_Surface.transform.SetPositionAndRotation(world, m_Camera.transform.rotation * Quaternion.Euler(0f, 180f, 0f));
+            var baseRotation = m_Camera.transform.rotation * Quaternion.Euler(0f, 180f, 0f);
+            m_Surface.transform.SetPositionAndRotation(world + m_SwipeOffset, baseRotation * m_SwipeTilt);
             m_Surface.transform.localScale = Vector3.one;
             m_Warp.SetPlaneSize(width, height);
             m_Warp.pokeRadius = Mathf.Min(width, height) * 0.40f;

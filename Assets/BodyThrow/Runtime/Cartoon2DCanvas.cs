@@ -20,17 +20,37 @@ namespace EarthOL.BodyThrow
         readonly HashSet<int> m_Active = new HashSet<int>();
         readonly HashSet<int> m_Selected = new HashSet<int>();
         readonly Dictionary<int,JellySkeletonPalette> m_Palettes = new Dictionary<int,JellySkeletonPalette>();
+        readonly Dictionary<int, Sprite> m_HeadArtworks = new Dictionary<int, Sprite>();
+        readonly Dictionary<int, string> m_SkinIds = new Dictionary<int, string>();
+        readonly Dictionary<int, bool> m_Antennae = new Dictionary<int, bool>();
+        public PersonStickerSkinCatalog SkinCatalog { get; private set; }
+        public string SelectedSkinId { get; private set; } = PersonStickerSkinCatalog.DefaultSkinId;
+        public bool SelectSkin(string skinId)
+        {
+            var skin = SkinCatalog != null ? SkinCatalog.Find(skinId) : null;
+            if (skin == null || !skin.Available) return false;
+            SelectedSkinId = skin.id;
+            return true;
+        }
+        public string SkinFor(int id) => m_SkinIds[id];
         public int RigCount => m_Rigs.Count;
         public int SelectedPersonCount => m_Selected.Count;
+        /// <summary>是否在 OnGUI 里画每个人物的识别框与“人物 X”文字（战斗模式由战斗层自己绘制，应关闭）。</summary>
+        public bool DrawPersonMarkers { get; set; } = true;
         public bool IsPersonActivated(int id) => m_Selected.Contains(id);
-        public void ActivatePerson(int id)
+        public void ActivatePerson(int id, string skinId = null)
         {
+            var skin = SkinCatalog != null ? SkinCatalog.Find(skinId ?? SelectedSkinId) : null;
+            m_SkinIds[id] = skin != null && skin.Available ? skin.id : PersonStickerSkinCatalog.DefaultSkinId;
+            m_HeadArtworks[id] = skin != null && skin.Available ? skin.headArtwork : m_HeadSprite;
+            m_Antennae[id] = skin != null && skin.Available && skin.jellyAntennae;
             m_Selected.Add(id);
             var palette=JellySkeletonPalette.RandomPair();
             if(m_Palettes.TryGetValue(id,out var previous))
                 while(palette.body==previous.body && palette.limbs==previous.limbs)palette=JellySkeletonPalette.RandomPair();
             m_Palettes[id]=palette;
-            if(m_Rigs.TryGetValue(id,out var rig) && rig!=null)rig.SetPalette(palette);
+            if(m_Rigs.TryGetValue(id,out var rig) && rig!=null)
+            { rig.SetPalette(palette); rig.SetHeadArtwork(m_HeadArtworks[id]); rig.SetJellyAntennae(m_Antennae[id]); }
             Refresh();
         }
         public JellySkeletonPalette PaletteFor(int id) => m_Palettes[id];
@@ -39,6 +59,9 @@ namespace EarthOL.BodyThrow
         {
             m_Selected.Remove(id);
             m_Palettes.Remove(id);
+            m_HeadArtworks.Remove(id);
+            m_SkinIds.Remove(id);
+            m_Antennae.Remove(id);
             Refresh();
         }
 
@@ -61,6 +84,7 @@ namespace EarthOL.BodyThrow
             m_HeadSprite = LoadArtwork("Skull");
             m_TorsoSprite = LoadArtwork("RibcagePelvis");
             m_PairedSprite = LoadArtwork("PairedBone");
+            SkinCatalog = Resources.Load<PersonStickerSkinCatalog>("PersonStickerSkins");
         }
 
         void LateUpdate() => Refresh();
@@ -86,8 +110,9 @@ namespace EarthOL.BodyThrow
                         var go = new GameObject("Cartoon Person " + person.personId, typeof(RectTransform));
                         rig = go.AddComponent<Cartoon2DRig>();
                     }
-                    rig.Configure(person.personId, m_CanvasRect, m_BodySprite, m_HeadSprite, m_TorsoSprite, m_PairedSprite);
+                    rig.Configure(person.personId, m_CanvasRect, m_BodySprite, m_HeadArtworks[person.personId], m_TorsoSprite, m_PairedSprite);
                     rig.SetPalette(m_Palettes[person.personId]);
+                    rig.SetJellyAntennae(m_Antennae[person.personId]);
                     m_Rigs[person.personId] = rig;
                 }
                 rig.UpdatePose(person, m_Camera, m_CanvasRect, scale);
@@ -110,7 +135,7 @@ namespace EarthOL.BodyThrow
 
         void OnGUI()
         {
-            if (m_Camera == null || m_Tracking == null) return;
+            if (m_Camera == null || m_Tracking == null || !DrawPersonMarkers) return;
             Color old = GUI.color;
             GUI.color = new Color(.25f, .9f, .6f, .8f);
             foreach (var person in m_Tracking.Persons)
@@ -143,6 +168,9 @@ namespace EarthOL.BodyThrow
         {
             m_Selected.Clear();
             m_Palettes.Clear();
+            m_HeadArtworks.Clear();
+            m_SkinIds.Clear();
+            m_Antennae.Clear();
             m_Active.Clear();
             ClearRigs();
         }

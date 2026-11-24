@@ -16,6 +16,10 @@ namespace EarthOL.BodyThrow
         public Vector2 DisplaySize => m_Rect.sizeDelta;
         public Vector2 DisplayStart => DisplayCenter - (Vector2)(m_Rect.localRotation * Vector3.right) * m_Rect.sizeDelta.x * .5f;
         public Vector2 DisplayEnd => DisplayCenter + (Vector2)(m_Rect.localRotation * Vector3.right) * m_Rect.sizeDelta.x * .5f;
+        public void SetArtwork(Sprite sprite)
+        {
+            if (m_Image != null) m_Image.sprite = sprite;
+        }
         public void Configure(Transform parent, Sprite sprite, Color color, bool face = false)
         {
             var part = new GameObject("Artwork", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));

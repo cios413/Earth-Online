@@ -22,10 +22,12 @@ namespace EarthOL.BodyThrow
         bool m_Configured;
         CartoonJellyShell m_Jelly;
         JellySkeletonPalette m_Palette;
+        bool m_JellyAntennae;
 
         public int PersonId { get; private set; }
         public JellySkeletonPalette Palette => m_Palette;
         public CartoonJellyShell JellyShell => m_Jelly;
+        public bool HasJellyAntennae => m_JellyAntennae;
 
         public void Configure(int personId, Transform parent, Sprite bodySprite, Sprite headSprite,
             Sprite torsoSprite = null, Sprite pairedBoneSprite = null)
@@ -33,6 +35,7 @@ namespace EarthOL.BodyThrow
             PersonId = personId;
             if (m_Configured)
             {
+                m_Head.SetArtwork(headSprite);
                 transform.SetParent(parent, false);
                 gameObject.SetActive(true);
                 return;
@@ -62,6 +65,9 @@ namespace EarthOL.BodyThrow
         }
 
         public void ReassignPerson(int personId) => PersonId = personId;
+
+        public void SetHeadArtwork(Sprite sprite) => m_Head?.SetArtwork(sprite);
+        public void SetJellyAntennae(bool enabled) => m_JellyAntennae = enabled;
 
         Cartoon2DPart NewPart(string partName, Sprite sprite, Color color, bool head = false)
         {
@@ -163,6 +169,8 @@ namespace EarthOL.BodyThrow
                 float taper=part.first==7||part.first==8||part.first==13||part.first==14?.9f:1f;
                 m_Jelly.AddSegment(part.visual.DisplayStart,part.visual.DisplayEnd,radius,radius*taper,true);
             }
+            if (m_JellyAntennae && m_Head.IsVisible)
+                m_Jelly.AddAntennae(m_Head.DisplayCenter, m_Head.DisplaySize.x * .75f);
             m_Jelly.FinishPose(alpha,width*.13f);
         }
 

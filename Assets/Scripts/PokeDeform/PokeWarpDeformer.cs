@@ -69,6 +69,9 @@ namespace EarthOL.Deform
             }
         }
 
+        /// <summary>是否存在进行中的挥扫横向剪切。</summary>
+        public bool HasActiveSwipeShear => Mathf.Abs(m_SwipeAmp) > 1e-5f;
+
         struct Poke
         {
             public bool used;
@@ -91,6 +94,12 @@ namespace EarthOL.Deform
         bool m_Ready;
         bool m_WasActive;
         Material m_InstanceMaterial;
+        Vector2 m_SwipeDir = Vector2.right;
+        float m_SwipeAmp;
+        BodySegment[] m_BodySegments = new BodySegment[0];
+        readonly Vector4[] m_BodyPartsCache = new Vector4[10];
+        readonly float[] m_BodyRadiusCache = new float[10];
+        int m_BodyCount;
 
         static readonly int[] s_PosIds =
         {
@@ -109,6 +118,12 @@ namespace EarthOL.Deform
             Shader.PropertyToID("_PokeBulge0"), Shader.PropertyToID("_PokeBulge1"),
             Shader.PropertyToID("_PokeBulge2"), Shader.PropertyToID("_PokeBulge3")
         };
+
+        static readonly int s_SwipeDirId = Shader.PropertyToID("_SwipeDir");
+        static readonly int s_SwipeAmpId = Shader.PropertyToID("_SwipeAmp");
+        static readonly int s_BodyPartsId = Shader.PropertyToID("_BodyParts");
+        static readonly int s_BodyRadiusId = Shader.PropertyToID("_BodyRadius");
+        static readonly int s_BodyCountId = Shader.PropertyToID("_BodyPartCount");
 
         void Awake()
         {
@@ -344,6 +359,61 @@ namespace EarthOL.Deform
             for (int i = 0; i < m_Pokes.Length; i++) m_Pokes[i].held = false;
         }
 
+        /// <summary>一次性冲击形变：在指定点产生一个立即回弹、强度可调的 poke（供挥扫攻击使用）。</summary>
+        public void ImpulsePoke(Vector3 worldPoint, float strength)
+        {
+            Initialize();
+            int slot = FindFreeSlot();
+            m_Pokes[slot] = new Poke
+            {
+                used = true,
+                held = false,
+                pointerId = -9999,
+                worldPoint = worldPoint,
+                localPoint = transform.InverseTransformPoint(worldPoint),
+                strength = Mathf.Clamp(strength, 0f, 1.5f),
+                velocity = 0f
+            };
+            PushToShader(true);
+        }
+
+        /// <summary>设置挥扫的方向性横向剪切（localDir 为面内局部方向，amp 为幅度）。</summary>
+        public void SetSwipeShear(Vector2 localDir, float amp)
+        {
+            if (localDir.sqrMagnitude > 1e-6f) m_SwipeDir = localDir.normalized;
+            m_SwipeAmp = amp;
+        }
+
+        public struct BodySegment
+        {
+            public Vector2 a;
+            public Vector2 b;
+            public float radius;
+            public BodySegment(Vector2 a, Vector2 b, float radius) { this.a = a; this.b = b; this.radius = radius; }
+        }
+
+        /// <summary>设置人形胶囊段（局部空间），供着色器在顶点阶段计算形变 mask。</summary>
+        public void SetBodyMask(BodySegment[] segments, float feather)
+        {
+            m_BodySegments = segments ?? new BodySegment[0];
+            int count = Mathf.Min(m_BodySegments.Length, 10);
+            for (int i = 0; i < 10; i++)
+            {
+                if (i < count)
+                {
+                    m_BodyPartsCache[i] = new Vector4(m_BodySegments[i].a.x, m_BodySegments[i].a.y,
+                        m_BodySegments[i].b.x, m_BodySegments[i].b.y);
+                    m_BodyRadiusCache[i] = m_BodySegments[i].radius;
+                }
+                else
+                {
+                    m_BodyPartsCache[i] = Vector4.zero;
+                    m_BodyRadiusCache[i] = 0f;
+                }
+            }
+            m_BodyCount = count;
+        }
+
         public void SetPlaneSize(float width, float height)
         {
             Initialize();
@@ -453,7 +523,7 @@ namespace EarthOL.Deform
                 }
             }
 
-            if (!anyActive && !m_WasActive && !force) return;
+            if (!anyActive && !m_WasActive && !force && Mathf.Abs(m_SwipeAmp) < 1e-5f) return;
 
             float radiusWorld = pokeRadius > 0f ? pokeRadius : 0.45f * Mathf.Min(planeWidth, planeHeight);
             float radiusObject = radiusWorld / m_AvgScale;
@@ -476,6 +546,12 @@ namespace EarthOL.Deform
                 m_Block.SetFloat(s_AmpIds[i], stretch);
                 m_Block.SetFloat(s_BulgeIds[i], bulge);
             }
+
+            m_Block.SetVector(s_SwipeDirId, new Vector4(m_SwipeDir.x, m_SwipeDir.y, 0f, 0f));
+            m_Block.SetFloat(s_SwipeAmpId, m_SwipeAmp);
+            m_Block.SetVectorArray(s_BodyPartsId, m_BodyPartsCache);
+            m_Block.SetFloatArray(s_BodyRadiusId, m_BodyRadiusCache);
+            m_Block.SetFloat(s_BodyCountId, m_BodyCount);
 
             m_Renderer.SetPropertyBlock(m_Block);
             m_WasActive = anyActive;

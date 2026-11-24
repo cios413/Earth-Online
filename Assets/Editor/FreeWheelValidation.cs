@@ -17,10 +17,12 @@ namespace EarthOL.EditorTools
         {
             ValidateGeometry();
             CombatIntegrationValidation.Validate();
+            PersonStickerSkinValidation.Validate();
+            WangCombatReuseValidation.Validate();
             ValidateInteraction(AppMode.Free);
             ValidateInteraction(AppMode.Combat);
             ValidateBattleWheel();
-            Debug.Log("[FreeWheelValidation] ALL PASS: retractable shared wheel, directional handles, cyclic selection, tap-position original throwing, collapsed deformation only, no aim guide, actual impact damage and lifecycle cleanup.");
+            Debug.Log("[FreeWheelValidation] ALL PASS: retractable shared wheel, target selection, barehand combat, cyclic selection, original throwing, no aim guide, impact damage and lifecycle cleanup.");
         }
 
         static void ValidateGeometry()
@@ -78,14 +80,15 @@ namespace EarthOL.EditorTools
                 tracking.UpdateDetections(new[] { PersonSystemValidation.FullPose() }, Time.realtimeSinceStartup);
                 Vector2 tap = camera.ViewportToScreenPoint(new Vector3(.55f, .58f, 0));
                 int personId = tracking.Pick(camera.ScreenToViewportPoint(tap)).personId;
-                if (mode == AppMode.Combat) combat.CaptureRound(personId);
-                Check(!wheel.Expanded && wheel.ShowUpArrow && !wheel.ShowDownArrow && surface.ReadPointerInput,
-                    "Sessions start collapsed with visible up arrow and deformation input");
+                Check(!wheel.Expanded && wheel.ShowUpArrow && !wheel.ShowDownArrow &&
+                    surface.ReadPointerInput == (mode == AppMode.Free),
+                    "Sessions start collapsed; combat waits for target selection before deformation");
                 Tap(wheel, tap);
                 combat.ProcessPointer(new BodyPointerFrame { id = 3, position = tap, down = true, held = true });
                 combat.ProcessPointer(new BodyPointerFrame { id = 3, position = tap, released = true });
                 Check(thrower.ActiveProjectileCount == 0 && (mode != AppMode.Combat || combat.FindRound(personId).History.Count == 0),
-                    "Collapsed person taps never throw or report barehand damage");
+                    "First combat tap selects without damage; free taps never throw");
+                if (mode == AppMode.Combat) Check(combat.SelectedPersonId == personId, "First tap selects combat target");
                 Set(wheel, "m_ConsumedFrame", -1);
                 Check(surface.RefreshRegion(0f) && surface.TryBegin(3, tap) && surface.Warp.HasActivePokes,
                     "Collapsed wheel permits the existing person deformation");
@@ -94,7 +97,7 @@ namespace EarthOL.EditorTools
                 Vector2 handle = ScreenPoint(wheel.Layout.HandleRect.center);
                 Frame(wheel, handle, true, true, false);
                 Frame(wheel, handle + Vector2.up * wheel.Layout.Travel, false, true, false);
-                Check(wheel.Reveal > .99f && wheel.ShowDownArrow, "Upward drag follows the finger and exposes down arrow");
+                Check(wheel.Reveal > .99f, "Upward drag follows the finger");
                 Frame(wheel, handle + Vector2.up * wheel.Layout.Travel, false, false, true);
                 Check(wheel.Expanded && wheel.Reveal == 1 && wheel.TapToThrowEnabled && !wheel.ShowUpArrow,
                     "Releasing pulled-out wheel enables person-tap throwing");
@@ -102,7 +105,7 @@ namespace EarthOL.EditorTools
                 Frame(wheel, center, true, true, false);
                 Check(wheel.ShowDownArrow && wheel.OwnsPointer, "Pressing expanded arc shows down arrow and captures gesture");
                 Frame(wheel, center, false, false, true);
-                Check(thrower.ActiveProjectileCount == 0 && !wheel.ShowDownArrow, "Releasing selection UI does not launch");
+                Check(thrower.ActiveProjectileCount == 0 && wheel.ShowDownArrow, "Releasing selection UI does not launch; expanded arrow remains visible");
                 int initial = wheel.SelectedIndex;
                 Frame(wheel, center, true, true, false);
                 Frame(wheel, center + Vector2.left * wheel.Layout.Step * 1.05f, false, true, false);
@@ -187,7 +190,8 @@ namespace EarthOL.EditorTools
                 tracking.UpdateDetections(new[] { PersonSystemValidation.FullPose(.5f), PersonSystemValidation.FullPose(.88f) }, Time.realtimeSinceStartup);
                 int target = tracking.Pick(Vector2.one * .5f).personId;
                 int other = tracking.Pick(new Vector2(.88f, .5f)).personId;
-                combat.CaptureRound(target); combat.CaptureRound(other);
+                combat.SelectPerson(target);
+                Check(combat.CaptureRound(other) == 0, "Unselected people cannot receive combat rounds");
                 var damage = (EarthOL.Combat.AttackDamageConfig)Get(combat, "m_Damage");
                 foreach (var entry in damage.AttackTypes) entry.criticalChance = 0;
                 wheel.SetExpanded(true);
@@ -197,7 +201,7 @@ namespace EarthOL.EditorTools
                 { Tap(wheel, tap); Invoke(thrower, "UpdateThrownItems", .5f); }
                 var roundResult = combat.FindRound(target);
                 Check(roundResult.Defeated && roundResult.CurrentHealth == 0 && defeats == 1 && stickers.IsPersonActivated(target) &&
-                    !stickers.IsPersonActivated(other) && combat.FindRound(other).CurrentHealth == combat.FindRound(other).MaxHealth,
+                    !stickers.IsPersonActivated(other) && combat.FindRound(other) == null,
                     "Tap projectiles retain per-person damage, defeat and isolated stickers");
                 int records = roundResult.History.Count;
                 Tap(wheel, tap); Invoke(thrower, "UpdateThrownItems", .5f);

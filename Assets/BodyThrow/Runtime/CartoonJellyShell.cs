@@ -6,7 +6,7 @@ namespace EarthOL.BodyThrow
     /// <summary>One bounded UI draw unions the head, neck, torso and limbs. No joint overdraw or texture seams.</summary>
     public sealed class CartoonJellyShell : MonoBehaviour
     {
-        public const int MaximumSegments = 12;
+        public const int MaximumSegments = 16;
         readonly Vector4[] m_Segments = new Vector4[MaximumSegments];
         readonly Vector4[] m_Radii = new Vector4[MaximumSegments];
         readonly Vector4[] m_UploadSegments = new Vector4[MaximumSegments];
@@ -68,6 +68,17 @@ namespace EarthOL.BodyThrow
         {
             AddSegment(center+Vector2.up*radius*.12f,center-Vector2.up*radius*.12f,radius,radius,false);
             m_Head = new Vector4(center.x,center.y,radius,1f);
+        }
+
+        public void AddAntennae(Vector2 center, float headRadius)
+        {
+            for (int side = -1; side <= 1; side += 2)
+            {
+                Vector2 start = center + new Vector2(side * .49f, .78f) * headRadius;
+                Vector2 tip = center + new Vector2(side * .72f, 1.55f) * headRadius;
+                AddSegment(start, tip, headRadius * .10f, headRadius * .085f, false);
+                AddSegment(tip, tip, headRadius * .18f, headRadius * .18f, false);
+            }
         }
 
         public void FinishPose(float alpha, float blendRadius)
