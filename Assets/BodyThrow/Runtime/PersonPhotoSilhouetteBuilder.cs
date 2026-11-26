@@ -6,6 +6,259 @@ namespace EarthOL.BodyThrow
 {
     public static class PersonPhotoSilhouetteBuilder
     {
+        static readonly int[,] SkeletonLinks =
+        {
+            { 0, 1 }, { 0, 2 }, { 1, 3 }, { 2, 4 },
+            { 5, 6 }, { 5, 7 }, { 7, 9 }, { 6, 8 }, { 8, 10 },
+            { 5, 11 }, { 6, 12 }, { 11, 12 }, { 11, 13 }, { 13, 15 },
+            { 12, 14 }, { 14, 16 }
+        };
+
+        struct SkeletonSegment
+        {
+            public Vector2 start, direction;
+            public float inverseLengthSquared;
+
+            public SkeletonSegment(Vector2 start, Vector2 end)
+            {
+                this.start = start;
+                direction = end - start;
+                inverseLengthSquared = 1f / Mathf.Max(.000001f, direction.sqrMagnitude);
+            }
+        }
+
+        public static Mesh BuildFromMask(Texture2D photo, byte[] alpha, float modelHeight)
+        {
+            return BuildFromMask(photo, alpha, modelHeight, null, default);
+        }
+
+        public static Mesh BuildFromMask(Texture2D photo, byte[] alpha, float modelHeight,
+            PersonPoseData pose, Rect photoBounds)
+        {
+            if (photo == null || alpha == null || alpha.Length != photo.width * photo.height) return null;
+            Color32[] pixels = photo.GetPixels32();
+            for (int i = 0; i < pixels.Length; i++) pixels[i].a = alpha[i];
+            photo.SetPixels32(pixels);
+            photo.Apply(false, false);
+
+            const float contour = 0.50f;
+            int gridX = Mathf.Clamp(photo.width * 2 / 3, 32, 192);
+            int gridY = Mathf.Clamp(photo.height * 2 / 3, 48, 256);
+            int row = gridX + 1;
+            int count = row * (gridY + 1);
+            float width = modelHeight * photo.width / photo.height;
+            float stepX = width / gridX;
+            float stepY = modelHeight / gridY;
+            float diagonal = Mathf.Sqrt(stepX * stepX + stepY * stepY);
+            float deepest = 0f;
+            var opacity = new float[count];
+            var distance = new float[count];
+            var positions = new Vector3[count];
+            var coordinates = new Vector2[count];
+            for (int y = 0; y <= gridY; y++)
+            for (int x = 0; x <= gridX; x++)
+            {
+                int i = y * row + x;
+                float u = x / (float)gridX, v = y / (float)gridY;
+                coordinates[i] = new Vector2(u, v);
+                positions[i] = new Vector3((u - 0.5f) * width, (v - 0.5f) * modelHeight, 0f);
+                if (x > 0 && x < gridX && y > 0 && y < gridY)
+                    opacity[i] = SampleAlpha(alpha, photo.width, photo.height, u, v);
+                distance[i] = opacity[i] > contour ? float.PositiveInfinity : 0f;
+            }
+
+            // Distance from the silhouette gives the torso more depth than thin limbs.
+            for (int y = 1; y < gridY; y++)
+            for (int x = 1; x < gridX; x++)
+            {
+                int i = y * row + x;
+                distance[i] = Mathf.Min(distance[i], Mathf.Min(distance[i - 1] + stepX, distance[i - row] + stepY));
+                distance[i] = Mathf.Min(distance[i], Mathf.Min(distance[i - row - 1], distance[i - row + 1]) + diagonal);
+            }
+            for (int y = gridY - 1; y > 0; y--)
+            for (int x = gridX - 1; x > 0; x--)
+            {
+                int i = y * row + x;
+                distance[i] = Mathf.Min(distance[i], Mathf.Min(distance[i + 1] + stepX, distance[i + row] + stepY));
+                distance[i] = Mathf.Min(distance[i], Mathf.Min(distance[i + row - 1], distance[i + row + 1]) + diagonal);
+                deepest = Mathf.Max(deepest, distance[i]);
+            }
+
+            float halfDepth = Mathf.Min(modelHeight * .056f, deepest * .56f) * .75f;
+            float edgeOffset = .5f * Mathf.Min(stepX, stepY);
+            var skeleton = BuildSkeleton(pose, photoBounds, width, modelHeight, alpha, photo.width, photo.height);
+            float maxInset = Mathf.Max(stepY, deepest - edgeOffset);
+            for (int y = 1; y < gridY; y++)
+            for (int x = 1; x < gridX; x++)
+            {
+                int i = y * row + x;
+                if (opacity[i] <= contour) continue;
+                Vector2 point = positions[i];
+                float skeletonDistanceSquared = float.PositiveInfinity;
+                foreach (var segment in skeleton)
+                {
+                    Vector2 offset = point - segment.start;
+                    float t = Mathf.Clamp01(Vector2.Dot(offset, segment.direction) * segment.inverseLengthSquared);
+                    skeletonDistanceSquared = Mathf.Min(skeletonDistanceSquared, (offset - segment.direction * t).sqrMagnitude);
+                }
+
+                float borderDistance = Mathf.Max(0f, distance[i] - edgeOffset);
+                float inset = Mathf.Clamp01(borderDistance / maxInset);
+                float fullness = inset * (2f - inset);
+                if (skeleton.Count > 0)
+                {
+                    float localWidth = borderDistance + Mathf.Sqrt(skeletonDistanceSquared);
+                    float localInset = Mathf.Clamp01(borderDistance / Mathf.Max(stepY, localWidth));
+                    float localDepth = .68f + .32f * Mathf.Sqrt(Mathf.Clamp01(localWidth / maxInset));
+                    float guided = localInset * (2f - localInset) * localDepth;
+                    fullness = Mathf.Lerp(fullness, guided, .55f);
+                }
+                float angle = Mathf.Atan2(point.y, point.x);
+                float fold = .5f - .5f * Mathf.Cos(angle * 12f + .18f * Mathf.Sin(angle * 3f));
+                float crease = .045f * fold * Mathf.Exp(-distance[i] / (stepY * 3.5f));
+                positions[i].z = -halfDepth * fullness * (1f - crease);
+            }
+
+            var vertices = new List<Vector3>();
+            var uvs = new List<Vector2>();
+            var photoUvs = new List<Vector2>();
+            var front = new List<int>();
+            var indices = new Dictionary<(int, int), int>();
+            var polygon = new int[4];
+
+            int Vertex(int a, int b)
+            {
+                var key = a < b ? (a, b) : (b, a);
+                if (indices.TryGetValue(key, out int index)) return index;
+                float t = a == b ? 0f : Mathf.InverseLerp(opacity[a], opacity[b], contour);
+                Vector3 position = Vector3.Lerp(positions[a], positions[b], t);
+                if (a != b) position.z = 0f;
+                index = vertices.Count;
+                vertices.Add(position);
+                uvs.Add(Vector2.Lerp(coordinates[a], coordinates[b], t));
+                // Sample just inside the geometric contour to reduce background color on the join.
+                // Keep the inset small so the photo does not jump between adjacent grid vertices.
+                Vector2 uv = uvs[index];
+                Vector2 inside = coordinates[opacity[a] >= opacity[b] ? a : b];
+                photoUvs.Add(Vector2.MoveTowards(uv, inside, .75f / Mathf.Max(photo.width, photo.height)));
+                indices.Add(key, index);
+                return index;
+            }
+
+            void ClipTriangle(int a, int b, int c)
+            {
+                int size = 0;
+                void Edge(int from, int to)
+                {
+                    bool inside = opacity[from] > contour;
+                    if (inside) polygon[size++] = Vertex(from, from);
+                    if (inside != (opacity[to] > contour)) polygon[size++] = Vertex(from, to);
+                }
+                Edge(a, b);
+                Edge(b, c);
+                Edge(c, a);
+                for (int i = 1; i + 1 < size; i++)
+                {
+                    front.Add(polygon[0]);
+                    front.Add(polygon[i]);
+                    front.Add(polygon[i + 1]);
+                }
+            }
+
+            for (int y = 0; y < gridY; y++)
+            for (int x = 0; x < gridX; x++)
+            {
+                int i = y * row + x;
+                ClipTriangle(i, i + row + 1, i + 1);
+                ClipTriangle(i, i + row, i + row + 1);
+            }
+            if (front.Count == 0) return null;
+
+            int faceVertexCount = vertices.Count;
+            for (int i = 0; i < faceVertexCount; i++)
+            {
+                Vector3 point = vertices[i];
+                point.z = -point.z;
+                vertices.Add(point);
+                uvs.Add(uvs[i]);
+                photoUvs.Add(photoUvs[i]);
+            }
+            var back = new List<int>(front.Count);
+            int BackIndex(int index) => vertices[index].z == 0f ? index : index + faceVertexCount;
+            for (int i = 0; i < front.Count; i += 3)
+            {
+                back.Add(BackIndex(front[i]));
+                back.Add(BackIndex(front[i + 2]));
+                back.Add(BackIndex(front[i + 1]));
+            }
+            var mesh = new Mesh { name = "Inflated Segmented Person" };
+            if (vertices.Count > 65535) mesh.indexFormat = IndexFormat.UInt32;
+            mesh.subMeshCount = 2;
+            mesh.SetVertices(vertices);
+            mesh.SetUVs(0, uvs);
+            mesh.SetUVs(1, photoUvs);
+            mesh.SetTriangles(front, 0);
+            mesh.SetTriangles(back, 1);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        static List<SkeletonSegment> BuildSkeleton(PersonPoseData pose, Rect photoBounds, float width, float height,
+            byte[] alpha, int pixelWidth, int pixelHeight)
+        {
+            var segments = new List<SkeletonSegment>(33);
+            if (pose?.keypoints == null || pose.keypointConfidence == null ||
+                pose.keypoints.Length < 17 || pose.keypointConfidence.Length < 17 ||
+                photoBounds.width <= 0f || photoBounds.height <= 0f) return segments;
+
+            var points = new Vector2[17];
+            var valid = new bool[17];
+            for (int i = 0; i < points.Length; i++)
+            {
+                Vector2 keypoint = pose.keypoints[i];
+                if (pose.keypointConfidence[i] < .30f || !photoBounds.Contains(keypoint)) continue;
+                float u = (keypoint.x - photoBounds.xMin) / photoBounds.width;
+                float v = (keypoint.y - photoBounds.yMin) / photoBounds.height;
+                if (SampleAlpha(alpha, pixelWidth, pixelHeight, u, v) < .5f) continue;
+                points[i] = new Vector2((u - .5f) * width, (v - .5f) * height);
+                valid[i] = true;
+                segments.Add(new SkeletonSegment(points[i], points[i]));
+            }
+
+            for (int i = 0; i < SkeletonLinks.GetLength(0); i++)
+            {
+                int start = SkeletonLinks[i, 0], end = SkeletonLinks[i, 1];
+                if (!valid[start] || !valid[end]) continue;
+                AddSegment(points[start], points[end]);
+            }
+            if (valid[5] && valid[6] && valid[11] && valid[12])
+                AddSegment((points[5] + points[6]) * .5f, (points[11] + points[12]) * .5f);
+            return segments;
+
+            void AddSegment(Vector2 start, Vector2 end)
+            {
+                for (int sample = 1; sample <= 3; sample++)
+                {
+                    Vector2 point = Vector2.Lerp(start, end, sample * .25f);
+                    if (SampleAlpha(alpha, pixelWidth, pixelHeight, point.x / width + .5f, point.y / height + .5f) < .5f)
+                        return;
+                }
+                segments.Add(new SkeletonSegment(start, end));
+            }
+        }
+
+        static float SampleAlpha(byte[] alpha, int width, int height, float u, float v)
+        {
+            float x = Mathf.Clamp(u * width - 0.5f, 0f, width - 1);
+            float y = Mathf.Clamp(v * height - 0.5f, 0f, height - 1);
+            int x0 = (int)x, y0 = (int)y;
+            int x1 = Mathf.Min(x0 + 1, width - 1), y1 = Mathf.Min(y0 + 1, height - 1);
+            float bottom = Mathf.Lerp(alpha[y0 * width + x0], alpha[y0 * width + x1], x - x0);
+            float top = Mathf.Lerp(alpha[y1 * width + x0], alpha[y1 * width + x1], x - x0);
+            return Mathf.Lerp(bottom, top, y - y0) / 255f;
+        }
+
         struct Capsule
         {
             public Vector2 a, b;

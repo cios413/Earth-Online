@@ -21,12 +21,64 @@ namespace EarthOL.EditorTools
             PersonSystemValidation.Person3DThrowValidation();
             PersonSystemValidation.PersonHeadJellyValidation();
             PersonSystemValidation.PersonShowcaseGeometryValidation();
+            PersonSystemValidation.SegmentedShowcaseGeometryValidation();
             PersonSystemValidation.BootstrapMigrationValidation();
             MultiPersonInteractionValidation.Validate();
             ValidateModelInteraction();
+            ValidateSegmentedSide();
             ProjectileSlimeValidation.ValidateShowcaseLight();
             ValidateProjectileSheet();
             Debug.Log("[ShowcaseInteraction] ALL PASS: automatic multi-person tracking, deformation interface, existing spring reuse, tap/drag/model crossing, rotation, GPU deformation/recovery and fixed side light.");
+        }
+
+        static void ValidateSegmentedSide()
+        {
+            var root = new GameObject("Segmented showcase side regression");
+            Texture2D image = null;
+            try
+            {
+                var camera = root.AddComponent<Camera>();
+                camera.enabled = false;
+                var tracking = root.AddComponent<PersonTrackingManager>();
+                var showcase = root.AddComponent<PersonShowcaseController>();
+                showcase.Configure(camera, tracking, null);
+                const int size = 96;
+                var photo = new Texture2D(size, size, TextureFormat.RGBA32, false);
+                var alpha = new byte[size * size];
+                var pixels = new Color32[alpha.Length];
+                for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    int i = y * size + x;
+                    pixels[i] = new Color32(230, 160, 120, 255);
+                    float edge = Mathf.Min(26f - Mathf.Abs(x - 47.5f), 39f - Mathf.Abs(y - 47.5f));
+                    alpha[i] = (byte)Mathf.RoundToInt(255f * Mathf.Clamp01((edge + 2f) / 4f));
+                }
+                photo.SetPixels32(pixels);
+                photo.Apply();
+                Set(showcase, "m_Photo", photo);
+                Set(showcase, "m_ModelMesh", PersonPhotoSilhouetteBuilder.BuildFromMask(photo, alpha, 1.45f));
+                Invoke(showcase, "CreateModelObject");
+                Invoke(showcase, "BeginPresentation");
+                var model = (GameObject)Get(showcase, "m_ModelRoot");
+                var preview = (Camera)Get(showcase, "m_PreviewCamera");
+                foreach (float yaw in new[] { 80f, 90f, 100f, 270f })
+                {
+                    model.transform.localRotation = Quaternion.Euler(0, yaw, 0);
+                    image = Capture(preview);
+                    for (int offset = -40; offset <= 40; offset++)
+                        Check(image.GetPixel(image.width / 2, image.height / 2 + offset).a > .95f,
+                            "Segmented preview has an opaque center line at yaw " + yaw);
+                    Object.DestroyImmediate(image);
+                    image = null;
+                }
+                Debug.Log("[ShowcaseInteraction] Segmented side GPU PASS at 80, 90, 100 and 270 degrees.");
+            }
+            finally
+            {
+                if (image != null) Object.DestroyImmediate(image);
+                Object.DestroyImmediate(root);
+            }
         }
 
         public static void ValidateProjectileSheet()
@@ -56,7 +108,6 @@ namespace EarthOL.EditorTools
                 var pose = PersonPoseData.FromDetection(PersonSystemValidation.FullPose(), 1f);
                 var showcaseMesh = PersonPhotoSilhouetteBuilder.Build(pose, photo, new Rect(.25f, .02f, .5f, .92f));
                 Set(showcase, "m_Photo", photo); Set(showcase, "m_ModelMesh", showcaseMesh);
-                Set(showcase, "m_BackPhoto", PersonPhotoSilhouetteBuilder.CreateBackTexture(photo));
                 Invoke(showcase, "CreateModelObject"); Invoke(showcase, "SaveProjectileSlot");
                 var saved = showcase.SavedProjectileSource;
                 var mesh = saved.GetComponent<MeshFilter>().sharedMesh;
@@ -169,7 +220,6 @@ namespace EarthOL.EditorTools
                 var pose=PersonPoseData.FromDetection(PersonSystemValidation.FullPose(),1f);
                 Mesh mesh=PersonPhotoSilhouetteBuilder.Build(pose,photo,new Rect(.25f,.02f,.5f,.92f));
                 Set(showcase,"m_ModelMesh",mesh);Set(showcase,"m_Photo",photo);
-                Set(showcase,"m_BackPhoto",PersonPhotoSilhouetteBuilder.CreateBackTexture(photo));
                 Invoke(showcase,"CreateModelObject");Invoke(showcase,"BeginPresentation");
                 var model=(GameObject)Get(showcase,"m_ModelRoot");
                 var renderer=model.GetComponent<Renderer>();

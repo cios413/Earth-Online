@@ -19,6 +19,7 @@ namespace EarthOL.ARCore
         [SerializeField, Range(1f, 15f)] float personDetectionFps = 5f;
         [SerializeField, Range(5f, 30f)] float personFlowFps = 15f;
         [SerializeField, Range(.3f, 3f)] float personLostSeconds = 1f;
+        [SerializeField, Range(2f, 120f)] float personReidentificationSeconds = 60f;
         [SerializeField] bool startPersonDetection = true;
         public Camera ARCamera { get; private set; }
         public PersonDeformationSurface PersonDeformer { get; private set; }
@@ -108,6 +109,7 @@ namespace EarthOL.ARCore
             SessionActive = false;
             SessionVersion++;
             DetectionManager.StopDetection();
+            PersonTracking.ClearPeople();
             CombatController.BeginSession(false, SessionVersion);
             ClickController.enabled = false;
             ShowcaseController.SetInteractionEnabled(false);
@@ -164,6 +166,7 @@ namespace EarthOL.ARCore
         {
             PersonTracking = gameObject.AddComponent<PersonTrackingManager>();
             PersonTracking.LostPersonSeconds = personLostSeconds;
+            PersonTracking.ReidentificationSeconds = personReidentificationSeconds;
             DetectionManager = gameObject.AddComponent<PoseDetectionManager>();
             DetectionManager.Configure(ARCamera, PersonTracking);
             bool lowMemoryMobile = Application.isMobilePlatform &&
@@ -172,7 +175,7 @@ namespace EarthOL.ARCore
                  SystemInfo.systemMemorySize <= 6000);
             DetectionManager.DetectionFramesPerSecond = lowMemoryMobile ? Mathf.Min(personDetectionFps, 3.5f) : personDetectionFps;
             DetectionManager.FlowFramesPerSecond = lowMemoryMobile ? Mathf.Min(personFlowFps, 10f) : personFlowFps;
-            DetectionManager.CaptureMaxSide = lowMemoryMobile ? 256 : 384;
+            DetectionManager.CaptureMaxSide = lowMemoryMobile ? 224 : 320;
             DetectionManager.AdaptiveMobileBudget = true;
             // The application entry owns startup; the detector itself is unchanged.
             DetectionManager.AutoStart = false;
@@ -245,7 +248,7 @@ namespace EarthOL.ARCore
         void ResetFeatureEffects()
         {
             FreeWheel?.ResetInteraction();
-            CombatController?.ResetRounds();
+            CombatController?.PauseTracking();
             PersonDeformer?.ResetEffects();
             ClickController?.ResetInput();
             CartoonCanvas?.ClearSelection();

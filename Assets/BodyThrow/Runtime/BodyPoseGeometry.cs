@@ -7,10 +7,10 @@ namespace EarthOL.BodyThrow
     {
         public const float MinimumScore = 0.45f;
 
-        public static bool HasPoint(BodyPoseResult pose, int index)
+        public static bool HasPoint(BodyPoseResult pose, int index, float minimumScore = MinimumScore)
         {
             if (!pose.IsValid || pose.keypointScores == null || pose.keypointScores.Length <= index ||
-                pose.keypointScores[index] < MinimumScore) return false;
+                pose.keypointScores[index] < minimumScore) return false;
             Vector2 point = pose.keypoints[index];
             return !float.IsNaN(point.x) && !float.IsNaN(point.y) &&
                 point.x >= 0f && point.x <= 1f && point.y >= 0f && point.y <= 1f;

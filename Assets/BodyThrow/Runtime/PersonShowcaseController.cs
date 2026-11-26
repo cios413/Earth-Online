@@ -2,6 +2,7 @@ using EarthOL.ARCore;
 using EarthOL.Deform;
 using UnityEngine;
 using System;
+using System.Collections;
 
 namespace EarthOL.BodyThrow
 {
@@ -23,7 +24,8 @@ namespace EarthOL.BodyThrow
         Mesh m_ModelMesh;
         MeshRenderer m_ModelRenderer;
         Material m_ModelMaterial, m_BackMaterial;
-        Texture2D m_Photo, m_BackPhoto;
+        readonly PersonPhotoSegmenter m_Segmenter = new PersonPhotoSegmenter();
+        Texture2D m_Photo;
         Camera m_PreviewCamera;
         RenderTexture m_PreviewTexture;
         int m_MainCameraMask;
@@ -39,6 +41,11 @@ namespace EarthOL.BodyThrow
         bool m_Presenting;
         bool m_Rotating;
         bool m_Deforming;
+        bool m_RecognitionPausedForShowcase;
+        IEnumerator m_PreviewBuild;
+        Vector2 m_BuildPosition;
+        bool m_PresentWhenReady;
+        Quaternion m_RenderedRotation;
         Vector2 m_RotationOrigin;
         GameObject m_SavedProjectile;
         Texture2D m_SavedProjectilePreview;
@@ -101,7 +108,19 @@ namespace EarthOL.BodyThrow
                 return;
             }
 
-            if (!BodyPointerFrame.TryRead(out var frame))
+            bool hasFrame = BodyPointerFrame.TryRead(out var frame);
+            if (m_PreviewBuild != null)
+            {
+                if (hasFrame && frame.id == m_PointerId && frame.canceled) { CancelPress(); return; }
+                if (hasFrame && frame.id == m_PointerId && (frame.held || frame.released))
+                    m_BuildPosition = frame.position;
+                if (!hasFrame || frame.id != m_PointerId || frame.released)
+                    m_PresentWhenReady = true;
+                AdvancePreviewBuild();
+                return;
+            }
+
+            if (!hasFrame)
             {
                 if (m_PointerHeld) CancelPress();
                 return;
@@ -112,7 +131,14 @@ namespace EarthOL.BodyThrow
             if (frame.canceled) { CancelPress(); return; }
 
             if (!m_ModelCreated && frame.held && Time.unscaledTime - m_PressTime >= LongPressSeconds)
-                CreatePreview(frame.position);
+            {
+                m_Detection?.SetShowcaseBuilding(true);
+                m_RecognitionPausedForShowcase = true;
+                m_BuildPosition = frame.position;
+                m_PreviewBuild = CreatePreview();
+                AdvancePreviewBuild();
+                return;
+            }
             if (m_ModelCreated && frame.held) MovePreview(frame.position);
             if (frame.released)
             {
@@ -124,9 +150,11 @@ namespace EarthOL.BodyThrow
         void LateUpdate()
         {
             if (!m_Presenting || m_PreviewCamera == null || m_ModelRoot == null) return;
+            bool wasDeforming = m_ModelDeformation?.HasActivePokes == true;
             m_ModelDeformation?.Advance(Time.unscaledDeltaTime);
-            m_PreviewCamera.transform.SetPositionAndRotation(m_MainCamera.transform.position, m_MainCamera.transform.rotation);
-            m_PreviewCamera.Render();
+            if (wasDeforming || m_ModelDeformation?.HasActivePokes == true ||
+                m_RenderedRotation != m_ModelRoot.transform.localRotation || !m_PreviewTexture.IsCreated())
+                RenderPreview();
         }
 
         void BeginPress(BodyPointerFrame frame)
@@ -143,29 +171,106 @@ namespace EarthOL.BodyThrow
             m_PressTime = Time.unscaledTime;
         }
 
-        void CreatePreview(Vector2 position)
+        void AdvancePreviewBuild()
         {
-            PersonPoseData person = m_Tracking != null ? m_Tracking.Find(m_PersonId) : null;
-            if (person == null || m_Detection == null || !m_Detection.CapturePersonPhoto(person.screenRect, out m_Photo, out Rect photoBounds))
+            try
             {
+                if (m_PreviewBuild.MoveNext()) return;
+                ReleasePreviewBuild();
+                ResumeRecognitionAfterShowcase();
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+                m_Detection?.RecordDiagnostic("showcase_build_error", personId: m_PersonId, flush: true);
                 CancelPress();
+                m_Segmenter.Dispose();
                 return;
             }
+            if (!m_ModelCreated) CancelPress();
+            else if (m_PresentWhenReady) BeginPresentation();
+            m_PresentWhenReady = false;
+        }
 
-            m_ModelMesh = PersonPhotoSilhouetteBuilder.Build(person, m_Photo, photoBounds, m_ModelHeight);
-            if (m_ModelMesh == null)
+        void ReleasePreviewBuild()
+        {
+            (m_PreviewBuild as IDisposable)?.Dispose();
+            m_PreviewBuild = null;
+        }
+
+        IEnumerator CreatePreview()
+        {
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            var tracked = m_Tracking != null ? m_Tracking.Find(m_PersonId) : null;
+            if (tracked == null || m_Detection == null) yield break;
+            var person = PersonPoseData.FromDetection(tracked.ToBodyPoseResult(), tracked.timestamp);
+            if (person == null) yield break;
+            person.personId = tracked.personId;
+            Rect photoBounds = default;
+            var capture = m_Detection.CapturePersonPhotoScheduled(PhotoCropBounds(person),
+                (photo, bounds) => { m_Photo = photo; photoBounds = bounds; });
+            try { while (capture.MoveNext()) yield return null; }
+            finally { (capture as IDisposable)?.Dispose(); }
+            if (m_Photo == null)
             {
-                CancelPress();
-                return;
+                m_Detection?.RecordDiagnostic("showcase_capture_failed", personId: m_PersonId, flush: true);
+                yield break;
             }
-            m_BackPhoto = PersonPhotoSilhouetteBuilder.CreateBackTexture(m_Photo);
-            if (m_BackPhoto == null) { CancelPress(); return; }
 
+            float captureMs = (float)timer.Elapsed.TotalMilliseconds;
+            yield return null;
+            while (m_Detection.InferenceRunning || m_Detection.CapturePending) yield return null;
+            var segmentationStart = (float)timer.Elapsed.TotalMilliseconds;
+            byte[] alpha = null;
+            var segmentation = m_Segmenter.SegmentScheduled(m_Photo, person, photoBounds, mask => alpha = mask);
+            try { while (segmentation.MoveNext()) yield return null; }
+            finally { (segmentation as IDisposable)?.Dispose(); }
+            float segmentationMs = (float)timer.Elapsed.TotalMilliseconds - segmentationStart;
+            if (alpha == null)
+            {
+                m_Detection.RecordDiagnostic("showcase_mask_failed", personId: person.personId,
+                    width: m_Photo.width, height: m_Photo.height, captureMs: captureMs,
+                    segmentationMs: segmentationMs, flush: true);
+                Debug.LogWarning("[PersonShowcase] No matching silhouette in captured photo.");
+                yield break;
+            }
+            yield return null;
+            float segmentationEnd = (float)timer.Elapsed.TotalMilliseconds;
+            m_ModelMesh = PersonPhotoSilhouetteBuilder.BuildFromMask(m_Photo, alpha, m_ModelHeight, person, photoBounds);
+            float meshMs = (float)timer.Elapsed.TotalMilliseconds - segmentationEnd;
+            int foregroundPixels = 0;
+            foreach (byte coverage in alpha) if (coverage >= 128) foregroundPixels++;
+            m_Detection.RecordDiagnostic(m_ModelMesh == null ? "showcase_mesh_failed" : "showcase_mesh",
+                personId: person.personId, width: m_Photo.width, height: m_Photo.height,
+                vertices: m_ModelMesh != null ? m_ModelMesh.vertexCount : 0,
+                depth: m_ModelMesh != null ? m_ModelMesh.bounds.size.z : 0f,
+                foregroundPixels: foregroundPixels, elapsedMs: (float)timer.Elapsed.TotalMilliseconds,
+                captureMs: captureMs, segmentationMs: segmentationMs, meshMs: meshMs, flush: true);
+            if (m_ModelMesh == null) yield break;
+            yield return null;
             CreateModelObject();
-            if (m_ModelRoot == null) return;
+            if (m_ModelRoot == null) yield break;
             m_ModelCreated = true;
             SaveProjectileSlot();
-            MovePreview(position);
+            MovePreview(m_BuildPosition);
+            Debug.Log($"[PersonShowcase] Photo silhouette ready in {timer.ElapsedMilliseconds} ms.");
+        }
+
+        public static Rect PhotoCropBounds(PersonPoseData person)
+        {
+            Rect bounds = person.screenRect;
+            var pose = person.AsPoseView();
+            for (int i = 5; i < 17; i++)
+            {
+                if (!BodyPoseGeometry.HasPoint(pose, i, .35f)) continue;
+                Vector2 joint = pose.keypoints[i];
+                Vector2 limit = bounds.size * .25f;
+                if (joint.x < bounds.xMin - limit.x || joint.x > bounds.xMax + limit.x ||
+                    joint.y < bounds.yMin - limit.y || joint.y > bounds.yMax + limit.y) continue;
+                bounds = Rect.MinMaxRect(Mathf.Min(bounds.xMin, joint.x), Mathf.Min(bounds.yMin, joint.y),
+                    Mathf.Max(bounds.xMax, joint.x), Mathf.Max(bounds.yMax, joint.y));
+            }
+            return bounds;
         }
 
         void CreateModelObject()
@@ -182,11 +287,16 @@ namespace EarthOL.BodyThrow
             if (shader == null)
             {
                 Debug.LogError("[PersonShowcase] 找不到透明 Unlit Shader。");
-                CancelPress();
+                DestroyModel();
                 return;
             }
             m_ModelMaterial = CreatePhotoMaterial(shader, m_Photo, "Photo Person Front Material");
-            m_BackMaterial = CreatePhotoMaterial(shader, m_BackPhoto, "Photo Person Back Material");
+            m_BackMaterial = CreatePhotoMaterial(shader, m_Photo, "Photo Person Back Material");
+            if (m_ModelMesh.HasVertexAttribute(UnityEngine.Rendering.VertexAttribute.TexCoord1))
+            {
+                m_ModelMaterial.SetFloat("_SolidContour", 1f);
+                m_BackMaterial.SetFloat("_SolidContour", 1f);
+            }
             m_ModelRenderer.sharedMaterials = new[] { m_ModelMaterial, m_BackMaterial };
             m_ModelRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             m_ModelRenderer.receiveShadows = false;
@@ -226,8 +336,10 @@ namespace EarthOL.BodyThrow
             const int maxSide = 768;
             int width = aspect < 1f ? Mathf.Max(256, Mathf.RoundToInt(maxSide * aspect)) : maxSide;
             int height = aspect < 1f ? maxSide : Mathf.Max(256, Mathf.RoundToInt(maxSide / aspect));
-            m_PreviewTexture = new RenderTexture(width, height, 16, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default)
-            { name = "Person Showcase Preview", antiAliasing = 1, useMipMap = false, autoGenerateMips = false };
+            var descriptor = new RenderTextureDescriptor(width, height, RenderTextureFormat.ARGB32, 16)
+            { msaaSamples = 4, useMipMap = false, autoGenerateMips = false };
+            descriptor.msaaSamples = SystemInfo.GetRenderTextureSupportedMSAASampleCount(descriptor);
+            m_PreviewTexture = new RenderTexture(descriptor) { name = "Person Showcase Preview" };
             m_PreviewTexture.Create();
 
             var cameraObject = new GameObject("Person Showcase Render Camera");
@@ -242,7 +354,7 @@ namespace EarthOL.BodyThrow
             m_PreviewCamera.farClipPlane = 6f;
             m_PreviewCamera.cullingMask = 1 << ShowcaseLayer;
             m_PreviewCamera.allowHDR = false;
-            m_PreviewCamera.allowMSAA = false;
+            m_PreviewCamera.allowMSAA = descriptor.msaaSamples > 1;
             m_PreviewCamera.useOcclusionCulling = false;
             m_PreviewCamera.targetTexture = m_PreviewTexture;
         }
@@ -385,8 +497,7 @@ namespace EarthOL.BodyThrow
 
         Mesh CreateProjectileMesh()
         {
-            // The showcase builder stores two matching surfaces. Keep the front silhouette
-            // and its exact photo UVs, flattening only depth for a single double-sided sheet.
+            // Keep one face for the double-sided projectile shader.
             int count = m_ModelMesh.vertexCount / 2;
             var vertices = new Vector3[count];
             var uvs = new Vector2[count];
@@ -394,6 +505,7 @@ namespace EarthOL.BodyThrow
             Array.Copy(m_ModelMesh.uv, uvs, count);
             for (int i = 0; i < count; i++) vertices[i].z = 0f;
             var mesh = new Mesh { name = "Photo Person Projectile Sheet" };
+            if (count > 65535) mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
             mesh.vertices = vertices;
             mesh.uv = uvs;
             mesh.triangles = m_ModelMesh.GetTriangles(0);
@@ -428,10 +540,14 @@ namespace EarthOL.BodyThrow
             if (m_PreviewCamera == null) return;
             m_PreviewCamera.transform.SetPositionAndRotation(m_MainCamera.transform.position, m_MainCamera.transform.rotation);
             m_PreviewCamera.Render();
+            m_RenderedRotation = m_ModelRoot.transform.localRotation;
         }
 
         void CancelPress()
         {
+            ReleasePreviewBuild();
+            m_PresentWhenReady = false;
+            ResumeRecognitionAfterShowcase();
             m_PointerHeld = false;
             m_ModelCreated = false;
             m_PersonId = -1;
@@ -440,6 +556,9 @@ namespace EarthOL.BodyThrow
 
         void ClearSession()
         {
+            ReleasePreviewBuild();
+            m_PresentWhenReady = false;
+            ResumeRecognitionAfterShowcase();
             EndModelPointer();
             m_PointerHeld = false;
             m_ModelCreated = false;
@@ -459,6 +578,13 @@ namespace EarthOL.BodyThrow
             }
         }
 
+        void ResumeRecognitionAfterShowcase()
+        {
+            if (!m_RecognitionPausedForShowcase) return;
+            m_Detection?.SetShowcaseBuilding(false);
+            m_RecognitionPausedForShowcase = false;
+        }
+
         void DestroyModel()
         {
             m_ModelDeformation?.Clear();
@@ -467,7 +593,6 @@ namespace EarthOL.BodyThrow
             if (m_ModelMaterial != null) DestroyOwned(m_ModelMaterial);
             if (m_BackMaterial != null) DestroyOwned(m_BackMaterial);
             if (m_Photo != null) DestroyOwned(m_Photo);
-            if (m_BackPhoto != null) DestroyOwned(m_BackPhoto);
             m_ModelRoot = null;
             m_ModelMesh = null;
             m_ModelRenderer = null;
@@ -475,7 +600,7 @@ namespace EarthOL.BodyThrow
             m_ModelDeformation = null;
             m_Deforming = false;
             m_ModelMaterial = m_BackMaterial = null;
-            m_Photo = m_BackPhoto = null;
+            m_Photo = null;
         }
 
         static Material CreatePhotoMaterial(Shader shader, Texture texture, string materialName)
@@ -510,9 +635,12 @@ namespace EarthOL.BodyThrow
             if (Application.isPlaying) Destroy(value); else DestroyImmediate(value);
         }
 
+        void OnDisable() => ClearSession();
+
         void OnDestroy()
         {
             ClearSession();
+            m_Segmenter.Dispose();
             ClearSavedProjectile();
         }
     }

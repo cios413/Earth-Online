@@ -100,6 +100,16 @@ namespace EarthOL.Combat
             ApplyInputPolicy();
         }
 
+        public void PauseTracking()
+        {
+            CancelGesture();
+            m_Holding = false;
+            m_Surface?.EndPointer();
+            m_Thrower?.CancelGesture();
+            foreach (var round in m_Rounds.Values) round.BreakCombo();
+            ApplyInputPolicy();
+        }
+
         public void OnFeatureChanged(GameMode feature)
         {
             CancelGesture();

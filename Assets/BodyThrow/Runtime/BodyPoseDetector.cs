@@ -1,46 +1,67 @@
 using System.Collections;
 using System.Collections.Generic;
-using Unity.Barracuda;
+using Unity.Collections;
+using Unity.Sentis;
 using UnityEngine;
 
 namespace EarthOL.BodyThrow
 {
-    /// <summary>YOLOv8-Pose decoder for one-person pose tracking.</summary>
+    /// <summary>YOLO pose inference and decoding for person tracking.</summary>
     public sealed class BodyPoseDetector : System.IDisposable
     {
         const int InputSize = 416;
         const int KeypointCount = 17;
+        const int KeypointDimensions = 3;
+        const int AnchorCount = 3549;
+        const int Yolo26BoxChannels = 4;
+        const int LegacyBoxChannels = 64;
         const float ConfidenceThreshold = 0.25f;
+        static readonly float k_MinScoreLogit = Mathf.Log(ConfidenceThreshold / (1f - ConfidenceThreshold));
         const float NmsThreshold = 0.45f;
+        const int MaxDecodedAnchors = 64;
+
+        struct ScoredAnchor
+        {
+            public int anchor;
+            public float score;
+        }
 
         Model m_Model;
-        IWorker m_Worker;
+        readonly bool m_UseYolo26;
+        Worker m_Worker;
+        Tensor<float> m_Input;
         readonly List<BodyPoseResult> m_Candidates = new List<BodyPoseResult>(16);
+        readonly List<ScoredAnchor> m_ScoredAnchors = new List<ScoredAnchor>(512);
         Rect m_InputRect = new Rect(0, 0, InputSize, InputSize);
         bool m_LoggedShapes;
-        float[] m_InputData;
+        NativeArray<float> m_InputData;
+        Color32[] m_SourcePixels;
+        int m_SourceWidth, m_SourceHeight;
 
         public bool Ready => m_Worker != null;
         public string Error { get; private set; }
+        public float LastDecodeMilliseconds { get; private set; }
+        public string ModelName => m_UseYolo26 ? "yolo26n-pose-raw" : "yolov8n-pose-raw";
+
+        public BodyPoseDetector(bool useYolo26 = true) => m_UseYolo26 = useYolo26;
 
         public IEnumerator Load()
         {
-            var nnModel = Resources.Load<NNModel>("Models/yolov8n-pose-raw");
-            if (nnModel == null)
+            var modelAsset = Resources.Load<ModelAsset>("Models/" + ModelName);
+            if (modelAsset == null)
             {
-                Error = "找不到 Assets/Resources/Models/yolov8n-pose-raw.onnx";
+                Error = "找不到姿态模型 " + ModelName;
                 Debug.LogWarning("[Pose] " + Error);
                 yield break;
             }
 
             try
             {
-                m_Model = ModelLoader.Load(nnModel);
-                bool mali = SystemInfo.graphicsDeviceName.IndexOf("Mali", System.StringComparison.OrdinalIgnoreCase) >= 0;
-                var backend = mali ? WorkerFactory.Type.CSharpBurst : WorkerFactory.Type.Auto;
-                m_Worker = WorkerFactory.CreateWorker(backend, m_Model);
-                Debug.Log("[Pose] YOLOv8-Pose 模型就绪：" + m_Worker.GetType().Name +
-                    (mali ? "，Mali GPU 显存保护：使用 Burst CPU 后端" : "，使用自动后端"));
+                m_Model = ModelLoader.Load(modelAsset);
+                m_Worker = CreateInferenceWorker(m_Model);
+                var backend = m_Worker.backendType;
+                Debug.Log("[Pose] " + ModelName + " 模型就绪：" + backend +
+                    (m_UseYolo26 ? "，YOLO26 reg_max=1 box=LTRB4 class=1 keypoints=17x3" : string.Empty));
             }
             catch (System.Exception exception)
             {
@@ -51,21 +72,38 @@ namespace EarthOL.BodyThrow
             yield return null;
         }
 
+        internal static Worker CreateInferenceWorker(Model model)
+        {
+            bool mali = SystemInfo.graphicsDeviceName.IndexOf("Mali", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            if (!mali && SystemInfo.supportsComputeShaders && SystemInfo.supportsAsyncGPUReadback &&
+                Resources.Load<ComputeShader>("Sentis/TextureConversion/TextureToTensor") != null)
+            {
+                try
+                {
+                    return new Worker(model, BackendType.GPUCompute);
+                }
+                catch (System.Exception exception)
+                {
+                    Debug.LogWarning("[Sentis] GPU worker unavailable, using CPU: " + exception.Message);
+                }
+            }
+            return new Worker(model, BackendType.CPU);
+        }
+
         public BodyPoseResult[] Detect(Color32[] pixels, int width, int height, int maxResults)
         {
             if (m_Worker == null || pixels == null || width <= 0 || height <= 0 || maxResults <= 0)
                 return System.Array.Empty<BodyPoseResult>();
 
-            using (var input = BuildInput(pixels, width, height))
-            {
-                m_Worker.Execute(input);
-                var boxes = m_Worker.PeekOutput("boxes_raw");
-                var scores = m_Worker.PeekOutput("scores_raw");
-                var pose = m_Worker.PeekOutput("pose_raw");
-                if (boxes == null || scores == null || pose == null)
-                    return System.Array.Empty<BodyPoseResult>();
-                Decode(boxes, scores, pose);
-            }
+            SnapshotAppearanceFrame(pixels, width, height);
+            var input = BuildInput(pixels, width, height);
+            m_Worker.Schedule(input);
+            var boxes = m_Worker.PeekOutput("boxes_raw") as Tensor<float>;
+            var scores = m_Worker.PeekOutput("scores_raw") as Tensor<float>;
+            var pose = m_Worker.PeekOutput("pose_raw") as Tensor<float>;
+            if (boxes == null || scores == null || pose == null)
+                return System.Array.Empty<BodyPoseResult>();
+            DecodeOutputs(boxes, scores, pose);
 
             return SelectResults(maxResults);
         }
@@ -74,22 +112,36 @@ namespace EarthOL.BodyThrow
             System.Action<BodyPoseResult[]> completed)
         {
             if (!Ready) yield break;
-            using (var input = BuildInput(pixels, width, height))
+            SnapshotAppearanceFrame(pixels, width, height);
+            var input = BuildInput(pixels, width, height);
             {
-                var schedule = m_Worker.StartManualSchedule(input);
+                var schedule = m_Worker.ScheduleIterable(input);
                 long start = System.Diagnostics.Stopwatch.GetTimestamp();
                 while (schedule.MoveNext())
                 {
                     double milliseconds = (System.Diagnostics.Stopwatch.GetTimestamp() - start) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
                     if (milliseconds < 4.0) continue;
-                    m_Worker.FlushSchedule(false);
                     yield return null;
                     start = System.Diagnostics.Stopwatch.GetTimestamp();
                 }
-                m_Worker.FlushSchedule(false);
-                yield return null;
-                Decode(m_Worker.PeekOutput("boxes_raw"), m_Worker.PeekOutput("scores_raw"), m_Worker.PeekOutput("pose_raw"));
-                completed(SelectResults(maxResults));
+                var boxes = m_Worker.PeekOutput("boxes_raw") as Tensor<float>;
+                var scores = m_Worker.PeekOutput("scores_raw") as Tensor<float>;
+                var pose = m_Worker.PeekOutput("pose_raw") as Tensor<float>;
+                if (boxes == null || scores == null || pose == null)
+                    throw new System.InvalidOperationException("YOLO pose model did not return all expected outputs.");
+                boxes.ReadbackRequest();
+                scores.ReadbackRequest();
+                pose.ReadbackRequest();
+                while (!boxes.IsReadbackRequestDone() || !scores.IsReadbackRequestDone() || !pose.IsReadbackRequestDone())
+                {
+                    yield return null;
+                }
+                long decodeStart = System.Diagnostics.Stopwatch.GetTimestamp();
+                DecodeOutputs(boxes, scores, pose);
+                var results = SelectResults(maxResults);
+                LastDecodeMilliseconds = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - decodeStart) *
+                    1000.0 / System.Diagnostics.Stopwatch.Frequency);
+                completed(results);
             }
         }
 
@@ -110,15 +162,23 @@ namespace EarthOL.BodyThrow
                         break;
                     }
                 }
-                if (!overlaps) result.Add(candidate);
+                if (overlaps) continue;
+                var selected = candidate;
+                selected.appearance = BuildAppearance(candidate.keypoints, candidate.keypointScores);
+                result.Add(selected);
             }
 
             return result.ToArray();
         }
 
-        Tensor BuildInput(Color32[] pixels, int width, int height)
+        Tensor<float> BuildInput(Color32[] pixels, int width, int height)
         {
-            if (m_InputData == null) m_InputData = new float[InputSize * InputSize * 3];
+            if (!m_InputData.IsCreated)
+                m_InputData = new NativeArray<float>(InputSize * InputSize * 3, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+            if (m_Input == null)
+                m_Input = new Tensor<float>(new TensorShape(1, 3, InputSize, InputSize), clearOnInit: false);
+            else
+                m_Input.CompleteAllPendingOperations();
             var data = m_InputData;
             float resize = Mathf.Min((float)InputSize / width, (float)InputSize / height);
             int resizedWidth = Mathf.Max(1, Mathf.RoundToInt(width * resize));
@@ -131,10 +191,12 @@ namespace EarthOL.BodyThrow
             {
                 for (int x = 0; x < InputSize; x++)
                 {
-                    int index = (y * InputSize + x) * 3;
+                    int pixelIndex = y * InputSize + x;
                     if (x < padX || x >= padX + resizedWidth || y < padY || y >= padY + resizedHeight)
                     {
-                        data[index] = data[index + 1] = data[index + 2] = 114f / 255f;
+                        float padding = 114f / 255f;
+                        data[pixelIndex] = data[InputSize * InputSize + pixelIndex] =
+                            data[InputSize * InputSize * 2 + pixelIndex] = padding;
                         continue;
                     }
 
@@ -142,30 +204,38 @@ namespace EarthOL.BodyThrow
                     int sourceX = Mathf.Clamp((x - padX) * width / resizedWidth, 0, width - 1);
                     int sourceY = height - 1 - Mathf.Clamp((y - padY) * height / resizedHeight, 0, height - 1);
                     var color = pixels[sourceY * width + sourceX];
-                    data[index] = color.r / 255f;
-                    data[index + 1] = color.g / 255f;
-                    data[index + 2] = color.b / 255f;
+                    data[pixelIndex] = color.r / 255f;
+                    data[InputSize * InputSize + pixelIndex] = color.g / 255f;
+                    data[InputSize * InputSize * 2 + pixelIndex] = color.b / 255f;
                 }
             }
 
-            return new Tensor(1, InputSize, InputSize, 3,
-                new SharedArrayTensorData(data, 0, data.Length), "ReusablePoseInput");
+            m_Input.Upload(data);
+            return m_Input;
         }
 
-        void Decode(Tensor boxes, Tensor scores, Tensor pose)
+        void DecodeOutputs(Tensor<float> boxes, Tensor<float> scores, Tensor<float> pose)
+        {
+            using var cpuBoxes = boxes.ReadbackAndClone();
+            using var cpuScores = scores.ReadbackAndClone();
+            using var cpuPose = pose.ReadbackAndClone();
+            Decode(cpuBoxes, cpuScores, cpuPose);
+        }
+
+        void Decode(Tensor<float> boxes, Tensor<float> scores, Tensor<float> pose)
         {
             m_Candidates.Clear();
-            var boxData = boxes.readonlyArray;
-            var scoreData = scores.readonlyArray;
-            var poseData = pose.readonlyArray;
-            const int anchors = 3549;
-            const int boxChannels = 64;
-            const int poseChannels = 51;
+            var boxData = boxes.AsReadOnlyNativeArray();
+            var scoreData = scores.AsReadOnlyNativeArray();
+            var poseData = pose.AsReadOnlyNativeArray();
+            const int anchors = AnchorCount;
+            int boxChannels = m_UseYolo26 ? Yolo26BoxChannels : LegacyBoxChannels;
+            const int poseChannels = KeypointCount * KeypointDimensions;
 
-            bool boxesInterleaved = IsAnchorMajor(boxes, boxChannels, anchors);
-            bool poseInterleaved = IsAnchorMajor(pose, poseChannels, anchors);
-            if (scores.length != anchors)
-                throw new System.InvalidOperationException("Unexpected pose score tensor: " + scores.shape);
+            bool boxesInterleaved = IsAnchorMajor(boxes.shape, boxChannels, anchors);
+            if (scores.shape.rank != 3 || scores.shape[0] != 1 || scores.shape[1] != 1 || scores.shape[2] != anchors)
+                throw new System.InvalidOperationException("Unexpected YOLO person-score tensor: " + scores.shape);
+            bool poseInterleaved = IsAnchorMajor(pose.shape, poseChannels, anchors);
             if (!m_LoggedShapes)
             {
                 Debug.Log($"[Pose] 输出布局 boxes={boxes.shape}, scores={scores.shape}, pose={pose.shape}; " +
@@ -177,16 +247,27 @@ namespace EarthOL.BodyThrow
             float ScoreAt(int anchor) => scoreData[anchor];
             float PoseAt(int channel, int anchor) => poseData[poseInterleaved ? anchor * poseChannels + channel : channel * anchors + anchor];
 
+            m_ScoredAnchors.Clear();
             for (int anchor = 0; anchor < anchors; anchor++)
             {
-                float score = Sigmoid(ScoreAt(anchor));
-                if (score < ConfidenceThreshold) continue;
+                float logit = ScoreAt(anchor);
+                if (!(logit >= k_MinScoreLogit) || float.IsInfinity(logit)) continue;
+                m_ScoredAnchors.Add(new ScoredAnchor { anchor = anchor, score = logit });
+            }
+            m_ScoredAnchors.Sort((a, b) => b.score.CompareTo(a.score));
+            int candidateCount = Mathf.Min(MaxDecodedAnchors, m_ScoredAnchors.Count);
+            for (int candidateIndex = 0; candidateIndex < candidateCount; candidateIndex++)
+            {
+                int anchor = m_ScoredAnchors[candidateIndex].anchor;
+                float score = Sigmoid(m_ScoredAnchors[candidateIndex].score);
 
                 GetGridPoint(anchor, out float gridX, out float gridY, out float stride);
-                float left = DistributionExpectation(BoxAt, 0, anchor) * stride;
-                float top = DistributionExpectation(BoxAt, 1, anchor) * stride;
-                float right = DistributionExpectation(BoxAt, 2, anchor) * stride;
-                float bottom = DistributionExpectation(BoxAt, 3, anchor) * stride;
+                float BoxDistance(int side) => (m_UseYolo26 ? BoxAt(side, anchor) :
+                    DistributionExpectation(BoxAt, side, anchor)) * stride;
+                float left = BoxDistance(0);
+                float top = BoxDistance(1);
+                float right = BoxDistance(2);
+                float bottom = BoxDistance(3);
                 float centerX = gridX * stride;
                 float centerY = gridY * stride;
                 float boxLeft = centerX - left;
@@ -195,7 +276,8 @@ namespace EarthOL.BodyThrow
                 float boxBottom = centerY + bottom;
                 float boxWidth = boxRight - boxLeft;
                 float boxHeight = boxBottom - boxTop;
-                if (boxWidth <= 2f || boxHeight <= 2f) continue;
+                if (!(boxWidth > 2f && boxHeight > 2f) ||
+                    float.IsInfinity(boxWidth) || float.IsInfinity(boxHeight)) continue;
 
                 Vector2 lower = ModelToViewport(new Vector2(boxLeft, boxBottom));
                 Vector2 upper = ModelToViewport(new Vector2(boxRight, boxTop));
@@ -209,9 +291,11 @@ namespace EarthOL.BodyThrow
 
                 for (int keypoint = 0; keypoint < KeypointCount; keypoint++)
                 {
-                    int offset = keypoint * 3;
-                    float x = (PoseAt(offset, anchor) * 2f + gridX - 0.5f) * stride;
-                    float yTop = (PoseAt(offset + 1, anchor) * 2f + gridY - 0.5f) * stride;
+                    int offset = keypoint * KeypointDimensions;
+                    float scale = m_UseYolo26 ? 1f : 2f;
+                    float gridOffset = m_UseYolo26 ? 0f : -.5f;
+                    float x = (PoseAt(offset, anchor) * scale + gridX + gridOffset) * stride;
+                    float yTop = (PoseAt(offset + 1, anchor) * scale + gridY + gridOffset) * stride;
                     float keypointScore = Sigmoid(PoseAt(offset + 2, anchor));
                     Vector2 point = ModelToViewport(new Vector2(x, yTop));
                     if (point.x < 0f || point.x > 1f || point.y < 0f || point.y > 1f)
@@ -231,30 +315,84 @@ namespace EarthOL.BodyThrow
             }
         }
 
+        float[] BuildAppearance(Vector2[] keypoints, float[] scores)
+        {
+            if (m_SourcePixels == null || m_SourceWidth <= 0 || m_SourceHeight <= 0 ||
+                scores[5] < 0.35f || scores[6] < 0.35f || scores[11] < 0.30f || scores[12] < 0.30f)
+                return null;
+
+            Vector2 shoulders = (keypoints[5] + keypoints[6]) * 0.5f;
+            Vector2 hips = (keypoints[11] + keypoints[12]) * 0.5f;
+            float shoulderHalfWidth = Vector2.Distance(keypoints[5], keypoints[6]) * 0.32f;
+            float hipHalfWidth = Vector2.Distance(keypoints[11], keypoints[12]) * 0.40f;
+            if (shoulderHalfWidth < 0.01f || hipHalfWidth < 0.008f) return null;
+
+            var histogram = new float[64];
+            int samples = 0;
+            const int across = 8;
+            const int down = 8;
+            for (int y = 0; y < down; y++)
+            for (int x = 0; x < across; x++)
+            {
+                float vertical = (y + 0.5f) / down;
+                Vector2 center = Vector2.Lerp(hips, shoulders, vertical);
+                float halfWidth = Mathf.Lerp(hipHalfWidth, shoulderHalfWidth, vertical);
+                float viewportX = center.x + ((x + 0.5f) / across * 2f - 1f) * halfWidth;
+                float viewportY = center.y;
+                int pixelX = Mathf.Clamp((int)(viewportX * m_SourceWidth), 0, m_SourceWidth - 1);
+                int pixelY = Mathf.Clamp((int)(viewportY * m_SourceHeight), 0, m_SourceHeight - 1);
+                Color32 color = m_SourcePixels[pixelY * m_SourceWidth + pixelX];
+                int sum = color.r + color.g + color.b;
+                int red = sum > 0 ? color.r * 8 / sum : 2;
+                int green = sum > 0 ? color.g * 8 / sum : 2;
+                int bin = sum < 100 ? 0 : sum > 570 && Mathf.Max(color.r, Mathf.Max(color.g, color.b)) -
+                    Mathf.Min(color.r, Mathf.Min(color.g, color.b)) < 35 ? 63 :
+                    Mathf.Clamp(red, 0, 7) * 8 + Mathf.Clamp(green, 0, 7);
+                histogram[bin]++;
+                samples++;
+            }
+
+            if (samples < 24) return null;
+            float inverseSamples = 1f / samples;
+            for (int i = 0; i < histogram.Length; i++) histogram[i] *= inverseSamples;
+            return histogram;
+        }
+
         Vector2 ModelToViewport(Vector2 point)
         {
             return new Vector2((point.x - m_InputRect.x) / m_InputRect.width,
                 1f - (point.y - m_InputRect.y) / m_InputRect.height);
         }
 
-        static bool IsAnchorMajor(Tensor tensor, int channels, int anchors)
+        void SnapshotAppearanceFrame(Color32[] pixels, int width, int height)
         {
-            if (tensor.length != channels * anchors || tensor.shape.batch != 1)
-                throw new System.InvalidOperationException("Unexpected pose output tensor: " + tensor.shape);
-            // Standard ONNX import and legacy NHWC import can expose different layouts.
-            if (tensor.shape.channels == channels && tensor.shape.width == anchors) return true;
-            if (tensor.shape.channels == anchors && tensor.shape.width == channels) return false;
-            if (tensor.shape.channels == 1 && tensor.shape.height == channels && tensor.shape.width == anchors) return false;
-            throw new System.InvalidOperationException("Unsupported pose output layout: " + tensor.shape);
+            int length = width * height;
+            if (m_SourcePixels == null || m_SourcePixels.Length != length)
+                m_SourcePixels = new Color32[length];
+            System.Array.Copy(pixels, m_SourcePixels, length);
+            m_SourceWidth = width;
+            m_SourceHeight = height;
+        }
+
+        static bool IsAnchorMajor(TensorShape shape, int channels, int anchors)
+        {
+            if (shape.rank == 3 && shape[0] == 1 && shape[1] == channels && shape[2] == anchors) return false;
+            if (shape.rank == 3 && shape[0] == 1 && shape[1] == anchors && shape[2] == channels) return true;
+            if (shape.rank == 4 && shape[0] == 1 && shape[1] == channels && shape[2] == 1 && shape[3] == anchors) return false;
+            if (shape.rank == 4 && shape[0] == 1 && shape[1] == 1 && shape[2] == anchors && shape[3] == channels) return true;
+            throw new System.InvalidOperationException("Unsupported YOLO pose output shape: " + shape);
         }
 
         public void Dispose()
         {
             m_Worker?.Dispose();
             m_Worker = null;
+            m_Input?.Dispose();
+            m_Input = null;
+            if (m_InputData.IsCreated) m_InputData.Dispose();
         }
 
-        static float DistributionExpectation(System.Func<int, int, float> read, int channel, int anchor)
+        internal static float DistributionExpectation(System.Func<int, int, float> read, int channel, int anchor)
         {
             float max = float.NegativeInfinity;
             for (int bin = 0; bin < 16; bin++)
@@ -296,12 +434,12 @@ namespace EarthOL.BodyThrow
             }
         }
 
-        static float Sigmoid(float value)
+        internal static float Sigmoid(float value)
         {
             return 1f / (1f + Mathf.Exp(-value));
         }
 
-        static float IoU(Rect a, Rect b)
+        internal static float IoU(Rect a, Rect b)
         {
             float width = Mathf.Max(0f, Mathf.Min(a.xMax, b.xMax) - Mathf.Max(a.xMin, b.xMin));
             float height = Mathf.Max(0f, Mathf.Min(a.yMax, b.yMax) - Mathf.Max(a.yMin, b.yMin));

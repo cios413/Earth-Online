@@ -10,8 +10,8 @@ estimation and live 3D updates. Its current scan interval was 0.30 seconds and
 384 pixels on the longest capture side, with inference suspended during legacy
 gestures. These values were read from the actual project, not the earlier design.
 
-Reusable: Unity 2022.3.62f3c1; AR Foundation/ARCore 5.1.6; Input System; Barracuda
-2.0.0; AR background display transform; letterboxing; DFL, grid-offset, sigmoid,
+Reusable: Unity 2022.3.62f3c1; AR Foundation/ARCore 5.1.6; Input System; Sentis
+2.1.3; AR background display transform; letterboxing; DFL, grid-offset, sigmoid,
 NMS and tensor-layout decoding; COCO-17 keypoint geometry; existing AR bootstrap.
 No model retraining or package upgrade is involved.
 

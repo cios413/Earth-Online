@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using EarthOL.BodyThrow;
-using Unity.Barracuda;
+using Unity.Sentis;
 using UnityEngine;
 using Object = UnityEngine.Object;
 
@@ -23,13 +23,12 @@ namespace EarthOL.EditorTools
         public static void Validate()
         {
             ValidateInput();
-            foreach (int layout in new[] { 0, 1, 2 })
-                foreach (int anchor in new[] { 1378, 3055, 3464 })
-                    foreach (bool portrait in new[] { true, false })
-                        ValidateDecode(layout, anchor, portrait);
+            foreach (int anchor in new[] { 1378, 3055, 3464 })
+                foreach (bool portrait in new[] { true, false })
+                    ValidateDecode(anchor, portrait);
             ValidateGeometry();
             ValidateModel();
-            Debug.Log("[PoseValidation] PASS: RGB orientation, letterbox round trips, three strides/layouts, " +
+            Debug.Log("[PoseValidation] PASS: NCHW RGB orientation, letterbox round trips, YOLO26 box/pose channels, " +
                 "confidence filtering, head/torso fitting and model inference.");
         }
 
@@ -39,31 +38,30 @@ namespace EarthOL.EditorTools
             {
                 var pixels = new Color32[8];
                 for (int i = 0; i < 8; i++) pixels[i] = i < 4 ? new Color32(255, 0, 0, 255) : new Color32(0, 255, 0, 255);
-                using (var tensor = (Tensor)Invoke(detector, "BuildInput", pixels, 2, 4))
-                {
-                    Near(tensor[0, 0, 208, 1], 1f, "Top input row must be green");
-                    Near(tensor[0, 415, 208, 0], 1f, "Bottom input row must be red");
-                    Near(tensor[0, 100, 0, 0], 114f / 255f, "Letterbox padding");
-                }
+                var tensor = (Tensor<float>)Invoke(detector, "BuildInput", pixels, 2, 4);
+                tensor.CompleteAllPendingOperations();
+                var data = tensor.AsReadOnlyNativeArray();
+                int plane = 416 * 416;
+                Near(data[plane + 208], 1f, "Top input row must be green");
+                Near(data[415 * 416 + 208], 1f, "Bottom input row must be red");
+                Near(data[100 * 416], 114f / 255f, "Letterbox padding");
             }
         }
 
-        static void ValidateDecode(int layout, int anchor, bool portrait)
+        static void ValidateDecode(int anchor, bool portrait)
         {
             using (var detector = new BodyPoseDetector())
             {
                 int width = portrait ? 200 : 400;
                 int height = portrait ? 400 : 200;
-                using (var input = (Tensor)Invoke(detector, "BuildInput", new Color32[width * height], width, height)) { }
-                using (var boxes = Output(layout, 64))
-                using (var pose = Output(layout, 51))
-                using (var scores = new Tensor(1, 1, Anchors, 1))
+                Invoke(detector, "BuildInput", new Color32[width * height], width, height);
+                using (var boxes = Output(4))
+                using (var pose = Output(51))
+                using (var scores = Output(1))
                 {
                     for (int i = 0; i < Anchors; i++) scores[i] = -20f;
                     scores[anchor] = 10f;
-                    for (int side = 0; side < 4; side++)
-                        for (int bin = 0; bin < 16; bin++)
-                            Set(boxes, layout, 64, side * 16 + bin, anchor, bin == 3 ? 10f : -10f);
+                    for (int side = 0; side < 4; side++) boxes[side * Anchors + anchor] = 4f;
 
                     float gridX, gridY, stride;
                     if (anchor < 2704) { gridX = anchor % 52 + 0.5f; gridY = anchor / 52 + 0.5f; stride = 8f; }
@@ -71,9 +69,9 @@ namespace EarthOL.EditorTools
                     else { gridX = (anchor - 3380) % 13 + 0.5f; gridY = (anchor - 3380) / 13 + 0.5f; stride = 32f; }
                     for (int i = 0; i < 17; i++)
                     {
-                        Set(pose, layout, 51, i * 3, anchor, (208f / stride - gridX + 0.5f) * 0.5f);
-                        Set(pose, layout, 51, i * 3 + 1, anchor, (156f / stride - gridY + 0.5f) * 0.5f);
-                        Set(pose, layout, 51, i * 3 + 2, anchor, 10f);
+                        pose[i * 3 * Anchors + anchor] = 208f / stride - gridX;
+                        pose[(i * 3 + 1) * Anchors + anchor] = 156f / stride - gridY;
+                        pose[(i * 3 + 2) * Anchors + anchor] = 10f;
                     }
                     Invoke(detector, "Decode", boxes, scores, pose);
                     var results = (List<BodyPoseResult>)Field(detector, "m_Candidates");
@@ -81,18 +79,25 @@ namespace EarthOL.EditorTools
                     Near(results[0].keypoints[0].x, 0.5f, "Letterbox x round trip");
                     Near(results[0].keypoints[0].y, portrait ? 0.625f : 0.75f, "Letterbox y round trip");
                     Check(results[0].keypointScores[0] > 0.99f, "Visibility sigmoid");
-                    Set(pose, layout, 51, 0, anchor, (-100f / stride - gridX + 0.5f) * 0.5f);
+                    int duplicateAnchor = anchor + 1;
+                    scores[duplicateAnchor] = 9f;
+                    for (int side = 0; side < 4; side++) boxes[side * Anchors + duplicateAnchor] = 4f;
                     Invoke(detector, "Decode", boxes, scores, pose);
+                    results = (List<BodyPoseResult>)Field(detector, "m_Candidates");
+                    Check(results.Count == 2, "Raw one-to-many model head may contain overlapping candidates");
+                    var selected = (BodyPoseResult[])Invoke(detector, "SelectResults", 6);
+                    Check(selected.Length == 1, "NMS must collapse overlapping pose candidates");
+                    pose[anchor] = -100f / stride - gridX;
+                    scores[duplicateAnchor] = -20f;
+                    Invoke(detector, "Decode", boxes, scores, pose);
+                    results = (List<BodyPoseResult>)Field(detector, "m_Candidates");
                     Near(results[0].keypointScores[0], 0f, "Out-of-view points must be rejected, not clamped to the border");
                 }
             }
         }
 
-        static Tensor Output(int layout, int channels) => layout == 0 ? new Tensor(1, 1, Anchors, channels) :
-            layout == 1 ? new Tensor(1, 1, channels, Anchors) : new Tensor(1, channels, Anchors, 1);
-
-        static void Set(Tensor tensor, int layout, int channels, int channel, int anchor, float value) =>
-            tensor[layout == 0 ? anchor * channels + channel : channel * Anchors + anchor] = value;
+        static Tensor<float> Output(int channels) =>
+            new Tensor<float>(new TensorShape(1, channels, Anchors), new float[channels * Anchors]);
 
         static BodyPoseResult Pose()
         {

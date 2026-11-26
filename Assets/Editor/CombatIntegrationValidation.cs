@@ -126,10 +126,17 @@ namespace EarthOL.EditorTools
                 Check(combat.FindRound(left).History.Count==1 && combat.FindRound(right).History.Count==2,"Held item crosses multiple people and rate-limits repeat hits");
                 Frame(combat,a,false,false,true);
                 Check(!combat.Confirm(new PersonInteractionHit(left,"press",Vector2.zero,PersonInteractionHit.NextId(),leftToken)),"Stale round is rejected through controller");
+                var savedRound = combat.FindRound(left);
+                float savedHealth = savedRound.CurrentHealth;
                 detector.StopDetection();
-                Check(combat.Rounds.Count==0 && !combat.Holding && !thrower.ReadPointerInput && !detector.DetectionEnabled && tracking.Count==0,"Stop resets all combat and shared effects without enabling legacy throw input");
+                Check(!combat.Holding && !thrower.ReadPointerInput && !detector.DetectionEnabled && tracking.Count==0,
+                    "Stop hides tracked people and cancels active input");
+                detector.StartDetection();
+                Seed(tracking);
+                Check(tracking.Find(left).trackingConfidence > .2f && combat.CaptureRound(left) == savedRound.Token &&
+                    combat.FindRound(left).CurrentHealth == savedHealth, "Reacquisition restores the same round and health");
                 bootstrap.ReturnToSelection(); bootstrap.EnterApp(AppMode.Free);
-                Check(!combat.Active && surface.ReadPointerInput && !thrower.ReadPointerInput &&
+                Check(!combat.Active && combat.Rounds.Count == 0 && surface.ReadPointerInput && !thrower.ReadPointerInput &&
                     Object.FindObjectsOfType<PersonTrackingManager>().Length==1 && Object.FindObjectsOfType<PersonCombatController>().Length==1,
                     "Combat-to-free restores direct deformation and wheel throw input with no duplicate runtime");
                 Check(!combat.Confirm(new PersonInteractionHit(right,"press",Vector2.zero,PersonInteractionHit.NextId(),rightToken)),"Free mode rejects late combat callbacks");

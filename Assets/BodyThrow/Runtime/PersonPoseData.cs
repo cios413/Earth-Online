@@ -11,6 +11,7 @@ namespace EarthOL.BodyThrow
         public Rect screenRect;
         public Vector2[] keypoints;
         public float[] keypointConfidence;
+        public float[] appearance;
         public float detectionConfidence;
         public float trackingConfidence;
         public float timestamp;
@@ -26,6 +27,7 @@ namespace EarthOL.BodyThrow
                 screenRect = result.screenRect,
                 keypoints = (Vector2[])result.keypoints.Clone(),
                 keypointConfidence = (float[])result.keypointScores.Clone(),
+                appearance = result.appearance != null ? (float[])result.appearance.Clone() : null,
                 detectionConfidence = result.confidence,
                 trackingConfidence = result.confidence,
                 timestamp = timestamp,
@@ -41,6 +43,7 @@ namespace EarthOL.BodyThrow
                 screenRect = screenRect,
                 keypoints = (Vector2[])keypoints.Clone(),
                 keypointScores = (float[])keypointConfidence.Clone(),
+                appearance = appearance != null ? (float[])appearance.Clone() : null,
                 confidence = Mathf.Max(0.001f, trackingConfidence)
             };
         }
@@ -50,6 +53,7 @@ namespace EarthOL.BodyThrow
             screenRect = screenRect,
             keypoints = keypoints,
             keypointScores = keypointConfidence,
+            appearance = appearance,
             confidence = Mathf.Max(0.001f, trackingConfidence)
         };
     }

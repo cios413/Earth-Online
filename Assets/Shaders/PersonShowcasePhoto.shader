@@ -4,6 +4,7 @@ Shader "EarthOL/ShowcasePhoto"
     {
         _MainTex ("Photo", 2D) = "white" {}
         _Color ("Tint", Color) = (1,1,1,1)
+        [HideInInspector] _SolidContour ("Solid contour", Float) = 0
         [HideInInspector] _PokePos0 ("Poke 0", Vector) = (0,0,0,0)
         [HideInInspector] _PokePos1 ("Poke 1", Vector) = (0,0,0,0)
         [HideInInspector] _PokePos2 ("Poke 2", Vector) = (0,0,0,0)
@@ -12,18 +13,20 @@ Shader "EarthOL/ShowcasePhoto"
     SubShader
     {
         Tags { "Queue"="Transparent" "RenderType"="Transparent" }
-        Blend SrcAlpha OneMinusSrcAlpha
+        Blend SrcAlpha OneMinusSrcAlpha, One OneMinusSrcAlpha
         ZWrite On Cull Back
         Pass
         {
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma target 3.0
             #include "UnityCG.cginc"
-            struct appdata { float4 vertex:POSITION; float3 normal:NORMAL; float2 uv:TEXCOORD0; };
+            struct appdata { float4 vertex:POSITION; float3 normal:NORMAL; float2 uv:TEXCOORD0; float2 sideUV:TEXCOORD1; };
             struct v2f { float4 vertex:SV_POSITION; float3 viewNormal:TEXCOORD0; float2 uv:TEXCOORD1; };
             sampler2D _MainTex;
             fixed4 _Color;
+            float _SolidContour;
             float4 _PokePos0, _PokePos1, _PokePos2, _PokePos3;
             float _PokeAmp0, _PokeAmp1, _PokeAmp2, _PokeAmp3;
             float _PokeBulge0, _PokeBulge1, _PokeBulge2, _PokeBulge3;
@@ -46,14 +49,17 @@ Shader "EarthOL/ShowcasePhoto"
                 WarpModel(v.vertex.xyz,_PokePos1,_PokeAmp1,_PokeBulge1,displacement);
                 WarpModel(v.vertex.xyz,_PokePos2,_PokeAmp2,_PokeBulge2,displacement);
                 WarpModel(v.vertex.xyz,_PokePos3,_PokeAmp3,_PokeBulge3,displacement);
-                v2f o; o.vertex=UnityObjectToClipPos(float4(v.vertex.xyz+displacement,1));o.uv=v.uv;
+                v2f o; o.vertex=UnityObjectToClipPos(float4(v.vertex.xyz+displacement,1));o.uv=lerp(v.uv,v.sideUV,_SolidContour);
                 o.viewNormal=mul((float3x3)UNITY_MATRIX_IT_MV,v.normal);
                 return o;
             }
             fixed4 frag(v2f i):SV_Target
             {
                 fixed4 photo=tex2D(_MainTex,i.uv)*_Color;
-                clip(photo.a-.01);
+                float edgeWidth = clamp(fwidth(photo.a), .015, .12);
+                photo.a = lerp(photo.a * smoothstep(.015, .015 + edgeWidth, photo.a),
+                    _Color.a, _SolidContour);
+                clip(photo.a-.005);
                 float3 n=normalize(i.viewNormal);
                 // Fixed in preview-camera space, independent of the AR pose and all scene lights.
                 float3 light=normalize(float3(-.85,.25,.45));

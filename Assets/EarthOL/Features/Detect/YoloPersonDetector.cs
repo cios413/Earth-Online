@@ -1,6 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
-using Unity.Barracuda;
+using Unity.Sentis;
 using UnityEngine;
 
 namespace EarthOL.Detect
@@ -24,23 +24,23 @@ namespace EarthOL.Detect
         public string Error { get; private set; }
 
         Model m_Model;
-        IWorker m_Worker;
+        Worker m_Worker;
         readonly List<Rect> m_Boxes = new List<Rect>(32);
         readonly List<float> m_Scores = new List<float>(32);
 
         public IEnumerator Load()
         {
-            var nnModel = Resources.Load<NNModel>("Models/yolov8n");
+            var modelAsset = Resources.Load<ModelAsset>("Models/yolov8n");
 
-            if (nnModel == null)
+            if (modelAsset == null)
             {
-                Error = "找不到 NNModel（Assets/Resources/Models/yolov8n.onnx 未导入成功）";
+                Error = "找不到 Sentis 模型资源（Assets/Resources/Models/yolov8n.onnx 未导入成功）";
                 Debug.LogWarning("[Yolo] " + Error);
                 yield break;
             }
 
-            m_Model = ModelLoader.Load(nnModel);
-            m_Worker = WorkerFactory.CreateWorker(WorkerFactory.Type.Auto, m_Model);
+            m_Model = ModelLoader.Load(modelAsset);
+            m_Worker = EarthOL.BodyThrow.BodyPoseDetector.CreateInferenceWorker(m_Model);
 
             Debug.Log($"[Yolo] 人检测模型就绪：{m_Worker.GetType().Name}，输入 {InputSize}");
             yield return null;
@@ -54,9 +54,9 @@ namespace EarthOL.Detect
 
             using (var input = BuildInput(pixels, width, height))
             {
-                m_Worker.Execute(input);
+                m_Worker.Schedule(input);
 
-                var output = m_Worker.PeekOutput("output0") ?? m_Worker.PeekOutput();
+                var output = (m_Worker.PeekOutput("output0") ?? m_Worker.PeekOutput()) as Tensor<float>;
                 if (output == null) return System.Array.Empty<DetectedObject>();
 
                 Decode(output);
@@ -65,7 +65,7 @@ namespace EarthOL.Detect
             return Finalize(maxResults);
         }
 
-        Tensor BuildInput(Color32[] pixels, int width, int height)
+        Tensor<float> BuildInput(Color32[] pixels, int width, int height)
         {
             var data = new float[InputSize * InputSize * 3];
 
@@ -79,22 +79,22 @@ namespace EarthOL.Detect
                     int sx = Mathf.Clamp(x * width / InputSize, 0, width - 1);
                     var c = pixels[sy * width + sx];
 
-                    int index = (y * InputSize + x) * 3;
+                    int index = y * InputSize + x;
                     data[index] = c.r / 255f;
-                    data[index + 1] = c.g / 255f;
-                    data[index + 2] = c.b / 255f;
+                    data[InputSize * InputSize + index] = c.g / 255f;
+                    data[InputSize * InputSize * 2 + index] = c.b / 255f;
                 }
             }
 
-            return new Tensor(1, InputSize, InputSize, 3, data);
+            return new Tensor<float>(new TensorShape(1, 3, InputSize, InputSize), data);
         }
 
-        void Decode(Tensor output)
+        void Decode(Tensor<float> output)
         {
             m_Boxes.Clear();
             m_Scores.Clear();
 
-            var data = output.ToReadOnlyArray();
+            var data = output.DownloadToArray();
             int anchors = Mathf.Max(1, data.Length / Attributes);
 
             // 布局自动判定：正常置信度 <= 1；读到 300+ 说明那是框坐标，布局反了

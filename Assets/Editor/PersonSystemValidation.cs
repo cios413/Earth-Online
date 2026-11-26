@@ -25,6 +25,8 @@ namespace EarthOL.EditorTools
             PersonFacingValidation();
             PersonHeadJellyValidation();
             PersonShowcaseGeometryValidation();
+            SegmentedShowcaseGeometryValidation();
+            PillowCrossSectionValidation();
             Cartoon2DRigValidation();
             Person3DThrowValidation();
             BootstrapMigrationValidation();
@@ -79,7 +81,63 @@ namespace EarthOL.EditorTools
                 Check(tracker.Count == 2 && tracker.Find(left) != null, "Returning person must recover ID");
                 Check(tracker.Pick(new Vector2(.73f,.5f)) != null, "Any detected person can receive feature input");
                 tracker.Tick(12f);
-                Check(tracker.Count == 0, "Stale tracks must expire");
+                Check(tracker.Count == 0 && tracker.Find(left).trackingConfidence == 0f,
+                    "Temporarily missing tracks must remain available for re-identification");
+                tracker.UpdateDetections(new[] { FullPose(.27f, -.01f), FullPose(.73f, .01f) }, 12.2f);
+                Check(tracker.Find(left) != null && tracker.Find(left).personId == left,
+                    "A returning person inside the re-identification window must retain their ID");
+                tracker.PauseTracks(12.3f);
+                tracker.ResumeTracks(120.3f);
+                tracker.Tick(120.3f);
+                Check(tracker.Find(left) != null && tracker.Find(left).personId == left,
+                    "A recognition pause must not age out retained person IDs");
+                tracker.Tick(181f);
+                Check(tracker.Count == 0 && tracker.Find(left) == null, "Dormant tracks must expire after the re-identification window");
+
+                var appearanceTracker = new GameObject("AppearanceReidentificationRegression").AddComponent<PersonTrackingManager>();
+                try
+                {
+                    BodyPoseResult original = FullPose(.30f);
+                    original.appearance = new float[64];
+                    original.appearance[21] = 1f;
+                    appearanceTracker.UpdateDetections(new[] { original }, 1f);
+                    int originalPersonId = appearanceTracker.Persons[0].personId;
+                    appearanceTracker.Tick(30f);
+                    BodyPoseResult returning = FullPose(.79f);
+                    returning.appearance = new float[64];
+                    returning.appearance[21] = 1f;
+                    appearanceTracker.UpdateDetections(new[] { returning }, 31f);
+                    Check(appearanceTracker.Count == 1 && appearanceTracker.Persons[0].personId == originalPersonId,
+                        "Matching clothing appearance must restore identity after long occlusion and large movement");
+                    appearanceTracker.ClearPeople();
+                    BodyPoseResult other = FullPose(.70f);
+                    other.appearance = original.appearance;
+                    appearanceTracker.UpdateDetections(new[] { original, other }, 40f);
+                    int firstId = appearanceTracker.Persons[0].personId, secondId = appearanceTracker.Persons[1].personId;
+                    BodyPoseResult ambiguous = FullPose(.50f);
+                    ambiguous.appearance = original.appearance;
+                    appearanceTracker.UpdateDetections(new[] { ambiguous }, 55f);
+                    Check(appearanceTracker.Count == 1 && appearanceTracker.Persons[0].personId != firstId &&
+                        appearanceTracker.Persons[0].personId != secondId,
+                        "Ambiguous clothing matches must not transfer a retained identity");
+                }
+                finally { Object.DestroyImmediate(appearanceTracker.gameObject); }
+
+                var panTracker = new GameObject("PanReidentificationRegression").AddComponent<PersonTrackingManager>();
+                try
+                {
+                    panTracker.UpdateDetections(new[] { FullPose(.24f) }, 10f);
+                    int id = panTracker.Persons[0].personId;
+                    panTracker.UpdateDetections(new[] { FullPose(.77f) }, 10.4f);
+                    Check(panTracker.Count == 1 && panTracker.Persons[0].personId == id,
+                        "Camera pan with one recent matching pose must not spawn a duplicate");
+                    panTracker.Tick(11.6f);
+                    panTracker.UpdateDetections(new[] { FullPose(.65f) }, 12f);
+                    Check(panTracker.Count == 1 && panTracker.Persons[0].personId == id,
+                        "Briefly missing single person may return elsewhere in the view");
+                }
+                finally { Object.DestroyImmediate(panTracker.gameObject); }
+
                 const int size = 64;
                 var previous = new byte[size*size]; var current = new byte[size*size];
                 var random = new System.Random(1234);
@@ -89,6 +147,20 @@ namespace EarthOL.EditorTools
                 Check(PersonKeypointFlow.TryTrack(previous,current,size,size,new Vector2(30f/63f,30f/63f),out var move,out float quality),
                     "Image patch tracking must recover textured motion");
                 Check(Mathf.Abs(move.x-3f/63f)<.001f && Mathf.Abs(move.y-1f/63f)<.001f && quality>.8f,"Flow displacement in viewport units");
+                for (int y = 0; y < size; y++) for (int x = 0; x < size; x++)
+                    current[y * size + x] = previous[y * size + Mathf.Max(0, x - 10)];
+                Check(PersonKeypointFlow.TryTrack(previous, current, size, size, new Vector2(30f/63f,30f/63f),
+                    out var expectedMove, out _, new Vector2(9f/63f,0f)) &&
+                    Mathf.Abs(expectedMove.x-10f/63f)<.001f,
+                    "Image flow search should follow the expected camera-pan displacement");
+                for (int y = 0; y < size; y++) for (int x = 0; x < size; x++)
+                    current[y * size + x] = previous[y * size + Mathf.Max(0, x - 5)];
+                Check(!PersonKeypointFlow.TryTrack(previous, current, size, size, new Vector2(30f / 63f, 30f / 63f), out _, out _),
+                    "Patch matches at the search boundary must be rejected");
+                var panProjection = Matrix4x4.Ortho(-1, 1, -1, 1, .1f, 10f);
+                Vector2 projected = PersonTrackingManager.ReprojectPoint(panProjection.inverse * panProjection, new Vector2(.27f, .68f));
+                Check(Vector2.Distance(projected, new Vector2(.27f, .68f)) < .001f,
+                    "Camera view reprojection preserves the same viewport point");
                 Debug.Log("[PersonValidation] Pose2DTrackingValidation PASS");
             }
             finally { Object.DestroyImmediate(go); }
@@ -112,6 +184,131 @@ namespace EarthOL.EditorTools
                 Debug.Log("[PersonValidation] PersonFacingValidation PASS");
             }
             finally { Object.DestroyImmediate(go); }
+        }
+
+        public static void SegmentedShowcaseGeometryValidation()
+        {
+            var pose = PersonPoseData.FromDetection(FullPose(), 1f);
+            pose.keypoints[9].x = pose.screenRect.xMax + pose.screenRect.width * .1f;
+            Check(PersonShowcaseController.PhotoCropBounds(pose).xMax >= pose.keypoints[9].x,
+                "Showcase crop includes a reliable wrist just outside the person box");
+            const int size = 128;
+            var photo = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            Mesh mesh = null;
+            try
+            {
+                var alpha = new byte[size * size];
+                for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float distance = Vector2.Distance(new Vector2(x + .5f, y + .5f), new Vector2(64, 64));
+                    alpha[y * size + x] = (byte)Mathf.RoundToInt(255f * Mathf.Clamp01(Mathf.Min(distance - 14f, 52f - distance)));
+                }
+
+                mesh = PersonPhotoSilhouetteBuilder.BuildFromMask(photo, alpha, 1.45f);
+                Check(mesh != null && mesh.subMeshCount == 2 && mesh.bounds.size.z > .042f,
+                    "Segmented photo includes front and back volume");
+                var vertices = mesh.vertices;
+                var uvs = mesh.uv;
+                int faceCount = vertices.Length / 2;
+                int seam = 0;
+                int fullDepthVertices = 0;
+                float depthThreshold = mesh.bounds.size.z * .34f;
+                for (int i = 0; i < faceCount; i++)
+                {
+                    var front = vertices[i];
+                    Check(vertices[i + faceCount] == new Vector3(front.x, front.y, -front.z) && uvs[i] == uvs[i + faceCount],
+                        "Segmented photo surfaces share matching geometry and UVs");
+                    Check(Vector2.Distance(uvs[i], Vector2.one * .5f) > .09f, "Mask hole must remain open");
+                    if (front.z == 0f) seam++;
+                    if (front.z < -depthThreshold) fullDepthVertices++;
+                }
+                var joined = new HashSet<int>(mesh.GetTriangles(1));
+                joined.RemoveWhere(i => i >= faceCount);
+                Check(seam > 100 && joined.Count == seam, "Front and back share the zero-thickness rim");
+                Check(fullDepthVertices > (faceCount - seam) * .08f,
+                    "Pillow retains a broad filled interior around the open mask hole");
+                Debug.Log($"[PersonValidation] SegmentedShowcaseGeometryValidation PASS: depth={mesh.bounds.size.z:F3}, seam={seam}");
+            }
+            finally
+            {
+                Object.DestroyImmediate(mesh);
+                Object.DestroyImmediate(photo);
+            }
+        }
+
+        static void PillowCrossSectionValidation()
+        {
+            const int size = 160;
+            var photo = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            Mesh mesh = null;
+            try
+            {
+                var alpha = new byte[size * size];
+                for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = (x + .5f - 80f) / 25f;
+                    float dy = (y + .5f - 80f) / 68f;
+                    float coverage = Mathf.Clamp01((1f - dx * dx - dy * dy) * 5f);
+                    alpha[y * size + x] = (byte)Mathf.RoundToInt(coverage * 255f);
+                }
+                mesh = PersonPhotoSilhouetteBuilder.BuildFromMask(photo, alpha, 1.45f);
+                Check(mesh != null, "Tall person mask creates a cushion mesh");
+                var vertices = mesh.vertices;
+                var uvs = mesh.uv;
+                int faceCount = vertices.Length / 2;
+                float centerDepth = 0f, nearRimDepth = 0f, farRimDepth = 0f;
+                int centerSamples = 0, nearSamples = 0, farSamples = 0;
+                for (int i = 0; i < faceCount; i++)
+                {
+                    if (Mathf.Abs(uvs[i].x - .5f) > .035f) continue;
+                    float v = uvs[i].y;
+                    float depth = -vertices[i].z;
+                    if (Mathf.Abs(v - .5f) < .05f) { centerDepth += depth; centerSamples++; }
+                    if (Mathf.Abs(v - .20f) < .035f) { nearRimDepth += depth; nearSamples++; }
+                    if (Mathf.Abs(v - .80f) < .035f) { farRimDepth += depth; farSamples++; }
+                }
+                Check(centerSamples > 0 && nearSamples > 0 && farSamples > 0,
+                    "Tall mask samples center and both shoulder/hip cross sections");
+                centerDepth /= centerSamples; nearRimDepth /= nearSamples; farRimDepth /= farSamples;
+                Debug.Log($"[PersonValidation] Pillow section depth center={centerDepth:F3}, lower={nearRimDepth:F3}, upper={farRimDepth:F3}");
+                Check(centerDepth > nearRimDepth * 1.10f && centerDepth > farRimDepth * 1.10f,
+                    "Cushion center is fuller than its narrower upper and lower sections");
+                float SampleDepth(Mesh sample, Vector2 uv)
+                {
+                    var points = sample.uv;
+                    var geometry = sample.vertices;
+                    int nearest = 0;
+                    for (int i = 1; i < points.Length / 2; i++)
+                        if ((points[i] - uv).sqrMagnitude < (points[nearest] - uv).sqrMagnitude) nearest = i;
+                    return -geometry[nearest].z;
+                }
+
+                float middleDepth = SampleDepth(mesh, new Vector2(.5f, .5f));
+                float halfwayDepth = SampleDepth(mesh, new Vector2(.425f, .5f));
+                Check(halfwayDepth > middleDepth * .58f && halfwayDepth < middleDepth * .88f,
+                    "Halfway from the rim, the convex section is already substantially filled");
+                var pose = new PersonPoseData { keypoints = new Vector2[17], keypointConfidence = new float[17] };
+                pose.keypoints[7] = new Vector2(.425f, .35f);
+                pose.keypoints[9] = new Vector2(.425f, .65f);
+                pose.keypointConfidence[7] = pose.keypointConfidence[9] = .9f;
+                var guided = PersonPhotoSilhouetteBuilder.BuildFromMask(photo, alpha, 1.45f, pose, new Rect(0, 0, 1, 1));
+                try
+                {
+                    Check(SampleDepth(guided, new Vector2(.425f, .5f)) > halfwayDepth * 1.12f &&
+                        SampleDepth(guided, new Vector2(.425f, .5f)) > SampleDepth(guided, new Vector2(.575f, .5f)),
+                        "A reliable off-center bone guides local fullness");
+                }
+                finally { Object.DestroyImmediate(guided); }
+                Check(mesh.bounds.size.z <= .135f, "Cushion side thickness remains modest");
+                Debug.Log($"[PersonValidation] PillowCrossSectionValidation PASS: center={centerDepth:F3}, shoulders={nearRimDepth:F3}, hips={farRimDepth:F3}");
+            }
+            finally
+            {
+                Object.DestroyImmediate(mesh);
+                Object.DestroyImmediate(photo);
+            }
         }
 
         public static void PersonShowcaseGeometryValidation()
@@ -330,11 +527,13 @@ namespace EarthOL.EditorTools
                     "Bootstrap creates the four 2D features around one detector/tracker");
                 Check(GameObject.Find("Soft Cube")==null && GameObject.Find("Soft Sphere")==null,"No demo geometry");
                 bootstrap.PersonTracking.UpdateDetections(new[]{FullPose()},Time.realtimeSinceStartup);
-                bootstrap.CartoonCanvas.ActivatePerson(bootstrap.PersonTracking.Persons[0].personId);
+                int suspendedId = bootstrap.PersonTracking.Persons[0].personId;
+                bootstrap.CartoonCanvas.ActivatePerson(suspendedId);
                 bootstrap.DetectionManager.StopDetection();
                 Check(!bootstrap.DetectionManager.DetectionEnabled && bootstrap.PersonTracking.Count==0 &&
+                    bootstrap.PersonTracking.Find(suspendedId)!=null &&
                     bootstrap.CartoonCanvas.SelectedPersonCount==0 && bootstrap.ThrowController.ActiveProjectileCount==0,
-                    "Stopping recognition stops inference and resets all feature effects");
+                    "Stopping recognition suspends tracks while resetting transient feature effects");
                 foreach(GameMode mode in new[]{GameMode.Deform,GameMode.Sticker,GameMode.Showcase,GameMode.Throw})
                 {
                     bootstrap.SetMode(mode);
@@ -361,14 +560,16 @@ namespace EarthOL.EditorTools
                 tracking.UpdateDetections(new[]{FullPose()},Time.realtimeSinceStartup);
                 int originalId=tracking.Persons[0].personId;
                 manager.StopDetection();
-                Check(tracking.Count==0,"Stopping detection must clear current person tracks");
+                Check(tracking.Count==0 && tracking.Find(originalId)!=null,
+                    "Stopping detection must suspend rather than discard person tracks");
                 int detection=manager.DetectionCount, capture=manager.CaptureCount,tensor=manager.TensorInputCount,ticks=tracking.TrackingUpdateCount,flow=tracking.FlowUpdateCount;
                 for(int i=0;i<30;i++)Invoke(manager,"Update");
                 Check(manager.DetectionCount==detection && manager.CaptureCount==capture && manager.TensorInputCount==tensor &&
                     tracking.TrackingUpdateCount==ticks && tracking.FlowUpdateCount==flow,"Stop must halt capture, tensors, inference, decode, tracking and flow");
                 manager.StartDetection(); Check(manager.DetectionEnabled,"Restart resumes detection");
                 tracking.UpdateDetections(new[]{FullPose()},Time.realtimeSinceStartup);
-                Check(tracking.Count==1 && tracking.Find(originalId)==null,"Restart automatically creates a fresh track after the stop reset");
+                Check(tracking.Count==1 && tracking.Find(originalId)!=null,
+                    "Restarting detection must resume the existing track and person ID");
                 manager.StopDetection();
                 // Real execution timing of the lightweight update path, not an inferred speed claim.
                 tracking.UpdateDetections(new[]{FullPose(.3f),FullPose(.7f)},10f);
@@ -396,7 +597,13 @@ namespace EarthOL.EditorTools
                     Check(results.Length==0,"Blank portrait input must not become a tracked person"); callback=true;
                 });
                 var timer=Stopwatch.StartNew();
-                while(schedule.MoveNext())steps++;
+                while (schedule.MoveNext())
+                {
+                    steps++;
+                    if (SystemInfo.supportsAsyncGPUReadback)
+                        UnityEngine.Rendering.AsyncGPUReadback.WaitAllRequests();
+                    Check(timer.ElapsedMilliseconds < 10000, "Scheduled pose inference timed out");
+                }
                 timer.Stop();
                 Check(callback && steps>=1,"Inference must execute via a yielded schedule, not a hidden per-frame full Execute");
                 Debug.Log($"[PersonValidation] Existing decoder tests and actual scheduled raw-model execution PASS: yields={steps} desktopWall={timer.Elapsed.TotalMilliseconds:F1}ms.");

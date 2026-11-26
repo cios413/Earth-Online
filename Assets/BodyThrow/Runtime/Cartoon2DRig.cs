@@ -20,6 +20,8 @@ namespace EarthOL.BodyThrow
         Cartoon2DPart m_Torso;
         RectTransform m_Root;
         bool m_Configured;
+        readonly Vector2[] m_LimbOffsets = new Vector2[17];
+        readonly float[] m_LimbSeen = new float[17];
         CartoonJellyShell m_Jelly;
         JellySkeletonPalette m_Palette;
 
@@ -61,7 +63,11 @@ namespace EarthOL.BodyThrow
             if (m_Jelly != null) m_Jelly.SetPalette(palette);
         }
 
-        public void ReassignPerson(int personId) => PersonId = personId;
+        public void ReassignPerson(int personId)
+        {
+            PersonId = personId;
+            System.Array.Clear(m_LimbSeen, 0, m_LimbSeen.Length);
+        }
 
         Cartoon2DPart NewPart(string partName, Sprite sprite, Color color, bool head = false)
         {
@@ -116,10 +122,10 @@ namespace EarthOL.BodyThrow
 
             foreach (var part in m_Parts)
             {
-                if (!BodyPoseGeometry.HasPoint(poseView, part.first) ||
-                    !BodyPoseGeometry.HasPoint(poseView, part.second) ||
-                    !TryLocal(pose.keypoints[part.first], camera, canvasRect, out var a) ||
-                    !TryLocal(pose.keypoints[part.second], camera, canvasRect, out var b))
+                if (!TryLimbPoint(poseView, part.first, out var first) ||
+                    !TryLimbPoint(poseView, part.second, out var second) ||
+                    !TryLocal(first, camera, canvasRect, out var a) ||
+                    !TryLocal(second, camera, canvasRect, out var b))
                 {
                     part.visual.SetVisible(false);
                     continue;
@@ -131,6 +137,21 @@ namespace EarthOL.BodyThrow
                 part.visual.SetSegment(a, b, Vector2.zero, width, alpha);
             }
             UpdateJelly(poseView, camera, canvasRect, origin, mirror, alpha);
+        }
+
+        bool TryLimbPoint(BodyPoseResult pose, int index, out Vector2 point)
+        {
+            float now = Time.unscaledTime;
+            float height = Mathf.Max(.05f, pose.screenRect.height);
+            if (BodyPoseGeometry.HasPoint(pose, index, .28f))
+            {
+                point = pose.keypoints[index];
+                m_LimbOffsets[index] = (point - pose.screenRect.center) / height;
+                m_LimbSeen[index] = now + .25f;
+                return true;
+            }
+            point = pose.screenRect.center + m_LimbOffsets[index] * height;
+            return m_LimbSeen[index] > now && point.x >= 0f && point.x <= 1f && point.y >= 0f && point.y <= 1f;
         }
 
         void UpdateJelly(BodyPoseResult pose, Camera camera, RectTransform canvas, Vector2 origin, bool mirror, float alpha)
