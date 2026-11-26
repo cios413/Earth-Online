@@ -17,6 +17,7 @@ MonoBehaviour:
     displayName: "1\u53F7 \xB7 \u7C98\u7C98\u624B"
     prefab: {fileID: 6530664904230838955, guid: 2ef4d58941df75941b246ea2f4de1d7b, type: 3}
     preview: {fileID: 2800000, guid: f88bfd6d02a2c8140a26e0cc008f2160, type: 3}
+    canHold: 1
     slimeColor: {r: 0.6349779, g: 0.99893326, b: 0.4487319, a: 1}
   - key: Brain
     displayName: "2\u53F7 \xB7 \u5927\u8111"
@@ -38,3 +39,8 @@ MonoBehaviour:
     prefab: {fileID: 8708685801836341808, guid: 203da4073ba17f4489925cfa3af5c17e, type: 3}
     preview: {fileID: 2800000, guid: 2db9cc3d0618da54ea227e44baf0ca67, type: 3}
     slimeColor: {r: 0.59, g: 0.94, b: 0.075, a: 1}
+  - key: DreamGrenade
+    displayName: "6\u53F7 \xB7 \u68A6\u5883\u624B\u96F7"
+    prefab: {fileID: 82906718754547004, guid: 555b96de2f28ea340bbdf2f042d3866e, type: 3}
+    preview: {fileID: 2800000, guid: 20cfffe7a201fa34faffa1f8901d082d, type: 3}
+    slimeColor: {r: 1, g: 0.62, b: 0.83, a: 1}

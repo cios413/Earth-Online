@@ -142,7 +142,11 @@ PlayerSettings:
   visionOSBundleVersion: 1.0
   tvOSBundleVersion: 1.0
   bundleVersion: 0.1
-  preloadedAssets: []
+  preloadedAssets:
+  - {fileID: 4800000, guid: c9f956787b1d945e7b36e0516201fc76, type: 3}
+  - {fileID: 4800000, guid: 0945859e5a1034c2cb6dce53cb4fb899, type: 3}
+  - {fileID: 11400000, guid: 9d8ab23983b6a214ab71d04cd668223b, type: 2}
+  - {fileID: 5733424036377479293, guid: a1100000000000000000000000000040, type: 2}
   metroInputSource: 0
   wsaTransparentSwapchain: 0
   m_HolographicPauseOnTrackingLoss: 1
@@ -744,7 +748,12 @@ PlayerSettings:
   webGLMemoryGeometricGrowthStep: 0.2
   webGLMemoryGeometricGrowthCap: 96
   webGLPowerPreference: 2
-  scriptingDefineSymbols: {}
+  scriptingDefineSymbols:
+    Android: UNITY_UOS_SECURITY
+    Server: UNITY_UOS_SECURITY
+    Standalone: UNITY_UOS_SECURITY
+    WebGL: UNITY_UOS_SECURITY
+    iPhone: UNITY_UOS_SECURITY
   additionalCompilerArguments: {}
   platformArchitecture: {}
   scriptingBackend:
@@ -855,11 +864,11 @@ PlayerSettings:
   apiCompatibilityLevel: 6
   activeInputHandler: 1
   windowsGamepadBackendHint: 0
-  cloudProjectId: 
+  cloudProjectId: bb9e66e1-6f53-4e89-b40b-5a13451625ad
   framebufferDepthMemorylessMode: 0
   qualitySettingsNames: []
-  projectName: 
-  organizationId: 
+  projectName: Earth Online
+  organizationId: uvw-x-yz
   cloudEnabled: 0
   legacyClampBlendShapeWeights: 0
   hmiLoadingImage: {fileID: 0}

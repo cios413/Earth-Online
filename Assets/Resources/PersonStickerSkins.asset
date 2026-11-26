@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 97a66230c0ca496f8e8c6ed3d7d2b93a, type: 3}
+  m_Name: PersonStickerSkins
+  m_EditorClassIdentifier:
+  entries:
+  - id: skeleton
+    displayName: 骷髅头
+    headArtwork: {fileID: 21300000, guid: 15216a1182efe04468c746b578b80be0, type: 3}
+    jellyAntennae: 0
+  - id: alien
+    displayName: 外星人
+    headArtwork: {fileID: 21300000, guid: b2280c82d4f94382ac2176969827112c, type: 3}
+    jellyAntennae: 1

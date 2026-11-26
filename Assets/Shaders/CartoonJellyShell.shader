@@ -35,8 +35,8 @@ Shader "EarthOL/UI/ConnectedJellySkeleton"
             #include "UnityUI.cginc"
             struct appdata { float4 vertex:POSITION; float2 uv:TEXCOORD0; fixed4 color:COLOR; };
             struct v2f { float4 vertex:SV_POSITION; float2 uv:TEXCOORD0; fixed4 color:COLOR; };
-            float4 _JellySegments[12]; // Canvas-space endpoints inside this person's bounded UI quad.
-            float4 _JellyRadii[12];    // Start radius, end radius, color group (0 body / 1 limbs), enabled.
+            float4 _JellySegments[16]; // Canvas-space endpoints, including optional head antennae.
+            float4 _JellyRadii[16];    // Start radius, end radius, color group (0 body / 1 limbs), enabled.
             float4 _JellySize;
             float4 _JellyHead;         // Head center/radius and presence for an interior shine.
             float _JellyBlend, _Opacity, _TrackingAlpha;
@@ -59,7 +59,7 @@ Shader "EarthOL/UI/ConnectedJellySkeleton"
                 float2 p = i.uv * _JellySize.xy;
                 float bodyD = 100000, limbD = 100000;
                 float2 bodyN = 0, limbN = 0;
-                [unroll] for (int j=0; j<12; j++)
+                [unroll] for (int j=0; j<16; j++)
                 {
                     if (_JellyRadii[j].w < .5) continue;
                     float2 a = _JellySegments[j].xy, b = _JellySegments[j].zw;

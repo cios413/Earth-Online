@@ -37,6 +37,7 @@ namespace EarthOL.Combat
         public float LastHitTime { get; private set; } = float.NegativeInfinity;
         public float TotalDamage { get; private set; }
         public IReadOnlyList<AttackOutcome> History => m_History;
+        public CombatSnapshot Snapshot { get; internal set; }
 
         public CombatRound(int personId, int token, float maxHealth)
         { PersonId = personId; Token = token; MaxHealth = CurrentHealth = Mathf.Max(1f, maxHealth); }
@@ -62,8 +63,7 @@ namespace EarthOL.Combat
             ComboCount++;
             LastHitTime = timestamp;
             BestCombo = Mathf.Max(BestCombo, ComboCount);
-            ComboMultiplier = Mathf.Clamp(combo.MultiplierCurve.Evaluate(Mathf.Min(ComboCount, combo.MaxComboForMultiplier)),
-                combo.InitialMultiplier, combo.MaxMultiplier);
+            ComboMultiplier = ComputeMilestoneMultiplier(combo, ComboCount);
             bool critical = criticalRoll < chance;
             if (critical) CriticalCount++;
             float damage = DamageCalculator.Compute(baseDamage, ComboMultiplier, critical ? criticalMultiplier : 1f);
@@ -77,6 +77,20 @@ namespace EarthOL.Combat
                 ComboCount, ComboMultiplier, critical, milestone, damage, applied);
             m_History.Add(outcome);
             return true;
+        }
+
+        static float ComputeMilestoneMultiplier(ComboConfig combo, int comboCount)
+        {
+            int reached = 0, total = 0;
+            foreach (int milestone in combo.ComboMilestones)
+            {
+                if (milestone > combo.MaxComboForMultiplier) continue;
+                total++;
+                if (comboCount >= milestone) reached++;
+            }
+            if (total == 0) return combo.InitialMultiplier;
+            return Mathf.Clamp(combo.InitialMultiplier + (combo.MaxMultiplier - combo.InitialMultiplier) * reached / total,
+                combo.InitialMultiplier, combo.MaxMultiplier);
         }
     }
 }

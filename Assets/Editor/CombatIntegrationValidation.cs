@@ -37,7 +37,7 @@ namespace EarthOL.EditorTools
                 Check(!left.TryApply(hit,attack,combo,damage,1.1f,1f,out _),"Duplicate event cannot apply twice");
                 Check(!right.TryApply(hit,attack,combo,damage,1.1f,1f,out _) && right.CurrentHealth==120f,"Damage is isolated by person and round");
                 Check(left.TryApply(new PersonInteractionHit(1,"press",Vector2.zero,2,11),attack,combo,damage,1.2f,0f,out var critical) &&
-                    critical.Critical && Mathf.Abs(critical.FinalDamage-18.75f)<.001f,"Second hit combines wang 1.25 combo and 1.5 critical multipliers");
+                    critical.Critical && Mathf.Abs(critical.FinalDamage-15f)<.001f,"Second hit uses the initial combo multiplier and 1.5 critical multiplier");
                 left.Tick(6f,combo);
                 Check(left.ComboCount==0 && left.BestCombo==2,"Combo timeout resets the active combo, retaining round statistics");
                 var replacement = new CombatRound(1,13,60);
@@ -89,17 +89,22 @@ namespace EarthOL.EditorTools
                     ReferenceEquals(thrower,bootstrap.ThrowController) && ReferenceEquals(surface,bootstrap.PersonDeformer),"Both modes reuse identical runtime instances");
                 Seed(tracking);
                 left=tracking.Pick(new Vector2(.27f,.5f)).personId; right=tracking.Pick(new Vector2(.73f,.5f)).personId;
+                Check(combat.IsSelecting && !bootstrap.CartoonCanvas.DrawPersonMarkers, "Combat selection owns its markers");
+                Frame(combat,leftPoint,true,true,false);
+                Frame(combat,leftPoint,false,false,true);
+                Check(!combat.IsSelecting && combat.SelectedPersonId==left && combat.FindRound(left).History.Count==0,
+                    "First tap selects target without damage");
                 int leftToken=combat.CaptureRound(left), rightToken=combat.CaptureRound(right);
                 Frame(combat,leftPoint,true,true,false);
                 Frame(combat,leftPoint,false,false,true);
-                Check(combat.FindRound(left).History.Count==1 && combat.FindRound(right).History.Count==0,"Tap attacks its own person only");
+                Check(combat.FindRound(left).History.Count==1 && combat.FindRound(right)==null,"Tap attacks the selected person only");
                 Frame(combat,leftPoint,true,true,false);
                 Frame(combat,leftPoint,false,false,false,true);
                 Check(combat.FindRound(left).History.Count==1,"Canceled press never reports damage");
                 Vector2 a=bootstrap.ARCamera.ViewportToScreenPoint(new Vector3(.01f,.5f,0));
                 Vector2 b=bootstrap.ARCamera.ViewportToScreenPoint(new Vector3(.99f,.5f,0));
                 Frame(combat,a,true,true,false); Frame(combat,b,false,true,false); Frame(combat,a,false,true,false); Frame(combat,a,false,false,true);
-                Check(combat.FindRound(left).History.Count==2 && combat.FindRound(right).History.Count==1,"Fast swipe crosses two people once each, with no duplicate on return");
+                Check(combat.FindRound(left).History.Count==2 && combat.FindRound(right)==null,"Fast swipe hits selected person once, ignoring others and return crossings");
                 bootstrap.SetMode(GameMode.Sticker);
                 int history=combat.FindRound(left).History.Count;
                 bootstrap.ClickController.TryActivateAt(leftPoint);
@@ -123,7 +128,7 @@ namespace EarthOL.EditorTools
                 thrower.SelectProjectile(sticky); combat.SetHolding(true);
                 Check(combat.Holding && !thrower.ReadPointerInput && !surface.ReadPointerInput,"Held item owns input without duplicating throw or deformation input");
                 Frame(combat,a,true,true,false); Frame(combat,b,false,true,false); Frame(combat,a,false,true,false);
-                Check(combat.FindRound(left).History.Count==1 && combat.FindRound(right).History.Count==2,"Held item crosses multiple people and rate-limits repeat hits");
+                Check(combat.FindRound(left).History.Count==1 && combat.FindRound(right)==null,"Held item only damages selected person and rate-limits repeat hits");
                 Frame(combat,a,false,false,true);
                 Check(!combat.Confirm(new PersonInteractionHit(left,"press",Vector2.zero,PersonInteractionHit.NextId(),leftToken)),"Stale round is rejected through controller");
                 var savedRound = combat.FindRound(left);

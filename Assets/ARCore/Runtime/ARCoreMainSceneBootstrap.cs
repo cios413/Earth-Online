@@ -49,6 +49,17 @@ namespace EarthOL.ARCore
 
         private IEnumerator Start()
         {
+            if (Application.isPlaying)
+            {
+                var account = EarthOL.Account.AccountUIController.Create(() => SessionActive, ReturnToSelection);
+                var ready = account.WaitUntilReadyAsync();
+                while (!ready.IsCompleted) yield return null;
+                if (ready.IsFaulted || ready.IsCanceled)
+                {
+                    Debug.LogException(ready.Exception);
+                    yield break;
+                }
+            }
             m_Overlay = new GameObject("ARCore Mode Overlay").AddComponent<ARCoreModeOverlay>();
             m_Overlay.Configure(this);
             while (!m_EntryRequested) yield return null;
@@ -67,14 +78,18 @@ namespace EarthOL.ARCore
             BuildPersonSystems();
             PersonDeformer = gameObject.AddComponent<PersonDeformationSurface>();
             PersonDeformer.Configure(ARCamera, PersonTracking, DistanceEstimator, DetectionManager);
+            var swipeDeform = gameObject.AddComponent<SwipeDeformController>();
+            swipeDeform.Configure(PersonDeformer);
             ShowcaseController.SetDeformationSource(PersonDeformer);
             ShowcaseController.ProjectileChanged += OnShowcaseProjectileChanged;
             ShowcaseController.ProjectileCleared += OnShowcaseProjectileCleared;
             PersonDeformer.enabled = false;
             CombatController = gameObject.AddComponent<PersonCombatController>();
-            CombatController.Configure(ARCamera, PersonTracking, PersonDeformer, ThrowController);
+            CombatController.Configure(ARCamera, PersonTracking, PersonDeformer, ThrowController, swipeDeform);
+            CartoonCanvas.PersonStickerDisplayed += OnPersonStickerDisplayed;
             CombatController.Defeated += OnPersonDefeated;
             CombatController.RoundRestarted += OnRoundRestarted;
+            CombatController.ContinueOtherPersons += OnContinueOtherPersons;
             FreeWheel = gameObject.AddComponent<FreeModeWheel>();
             FreeWheel.Configure(this);
             ThrowController.InteractionConfirmed += OnPersonImpact;
@@ -98,6 +113,7 @@ namespace EarthOL.ARCore
             SessionActive = true;
             CombatController.BeginSession(SelectedAppMode == AppMode.Combat, SessionVersion);
             if (SelectedAppMode == AppMode.Combat) ThrowController.SelectProjectile(0);
+            CartoonCanvas.DrawPersonMarkers = SelectedAppMode == AppMode.Free;
             m_Overlay.SelectFeature(GameMode.Deform);
             FreeWheel.SetExpanded(false);
             if (startPersonDetection) DetectionManager.StartDetection();
@@ -219,7 +235,8 @@ namespace EarthOL.ARCore
             if (PersonDeformer != null)
             {
                 PersonDeformer.enabled = true;
-                PersonDeformer.ReadPointerInput = deform;
+                if (SelectedAppMode == AppMode.Combat) CombatController?.RefreshInputPolicy();
+                else PersonDeformer.ReadPointerInput = deform;
                 if (!deform) PersonDeformer.ResetEffects();
             }
         }
@@ -234,10 +251,31 @@ namespace EarthOL.ARCore
         {
             if (SessionActive && SelectedAppMode == AppMode.Combat && PersonTracking.Find(round.PersonId) != null &&
                 !CartoonCanvas.IsPersonActivated(round.PersonId))
-                CartoonCanvas.ActivatePerson(round.PersonId);
+                CartoonCanvas.ActivatePerson(round.PersonId, PersonStickerSkinCatalog.DefaultSkinId);
+            if (CartoonCanvas.IsPersonStickerVisible(round.PersonId)) OnPersonStickerDisplayed(round.PersonId);
+        }
+
+        void OnPersonStickerDisplayed(int personId)
+        {
+            if (SessionActive && SelectedAppMode == AppMode.Combat)
+                CombatController.CaptureDefeatedPersonSticker(personId,SessionVersion);
         }
 
         void OnRoundRestarted(int personId) => CartoonCanvas.DeactivatePerson(personId);
+
+        void OnContinueOtherPersons()
+        {
+            if (!SessionActive || SelectedAppMode != AppMode.Combat) return;
+            StartCoroutine(RestartDetection());
+        }
+
+        IEnumerator RestartDetection()
+        {
+            // Defer one frame so the heavy model reload does not stall the OnGUI button callback.
+            yield return null;
+            DetectionManager.StopDetection();
+            DetectionManager.StartDetection();
+        }
         void OnShowcaseProjectileChanged(GameObject source, Texture2D preview)
         {
             ThrowController.SetShowcaseProjectile(source, preview);
@@ -247,6 +285,7 @@ namespace EarthOL.ARCore
 
         void ResetFeatureEffects()
         {
+            m_Overlay?.CloseStickerSkinPicker();
             FreeWheel?.ResetInteraction();
             CombatController?.PauseTracking();
             PersonDeformer?.ResetEffects();
@@ -255,7 +294,11 @@ namespace EarthOL.ARCore
             ShowcaseController?.ResetForDetectionStop();
             ThrowController?.ClearEffects();
             if (ThrowController != null) ThrowController.ReadPointerInput = false;
-            if (PersonDeformer != null) PersonDeformer.ReadPointerInput = CurrentMode == GameMode.Deform;
+            if (PersonDeformer != null)
+            {
+                if (SelectedAppMode == AppMode.Combat) CombatController?.RefreshInputPolicy();
+                else PersonDeformer.ReadPointerInput = CurrentMode == GameMode.Deform;
+            }
         }
 
         private IEnumerator InitializeXR()
@@ -277,10 +320,12 @@ namespace EarthOL.ARCore
 
         private void OnDestroy()
         {
+            if (CartoonCanvas != null) CartoonCanvas.PersonStickerDisplayed -= OnPersonStickerDisplayed;
             if (CombatController != null)
             {
                 CombatController.Defeated -= OnPersonDefeated;
                 CombatController.RoundRestarted -= OnRoundRestarted;
+                CombatController.ContinueOtherPersons -= OnContinueOtherPersons;
             }
             if (ShowcaseController != null)
             {

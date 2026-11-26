@@ -12,11 +12,12 @@ namespace EarthOL.Combat
         [SerializeField, Min(1)] int maxComboForMultiplier = 20;
         [SerializeField] AnimationCurve multiplierCurve;
         [SerializeField] int[] comboMilestones = { 5, 10, 15, 20, 30, 50 };
+        static readonly int[] s_DefaultMilestones = { 5, 10, 15, 20, 30, 50 };
         public float ComboDuration => Mathf.Max(.05f, comboDuration);
         public float InitialMultiplier => Mathf.Max(1f, initialMultiplier);
         public float MaxMultiplier => Mathf.Max(InitialMultiplier, maxMultiplier);
         public int MaxComboForMultiplier => Mathf.Max(1, maxComboForMultiplier);
-        public int[] ComboMilestones => comboMilestones;
+        public int[] ComboMilestones => comboMilestones != null && comboMilestones.Length > 0 ? comboMilestones : s_DefaultMilestones;
         public AnimationCurve MultiplierCurve => multiplierCurve ?? (multiplierCurve = CreateDefaultCurve());
         public static AnimationCurve CreateDefaultCurve() => new AnimationCurve(
             new Keyframe(1f, 1f), new Keyframe(2f, 1.25f), new Keyframe(3f, 1.48f),

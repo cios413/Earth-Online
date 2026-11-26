@@ -16,6 +16,7 @@ namespace EarthOL.BodyThrow
         const float PersonLayerDepth = 1.20f;
         const float ProjectileVisualScale = .25f;
         const int MaximumProjectiles = 24;
+        const int MaximumDreamGrenades = 4;
 
         sealed class ThrownItem
         {
@@ -35,6 +36,7 @@ namespace EarthOL.BodyThrow
             public Vector2 targetViewport;
             public float missAge;
             public System.Action releaseVisualAssets;
+            public DreamGrenadeProjectile dreamGrenade;
         }
 
         Camera m_Camera;
@@ -61,6 +63,7 @@ namespace EarthOL.BodyThrow
         public System.Func<int, int> InteractionContext { get; set; }
         public bool ReadPointerInput { get; set; } = true;
         public string SelectedProjectileKey => TryGetEntry(m_SelectedProjectile, out var entry) ? entry.key : string.Empty;
+        public BodyProjectileCatalog.Entry SelectedEntry => TryGetEntry(m_SelectedProjectile, out var entry) ? entry : null;
         public Texture2D SelectedProjectilePreview => GetProjectilePreview(m_SelectedProjectile);
         public int SelectedProjectileIndex => m_SelectedProjectile;
         public int ActiveProjectileCount => m_Items.Count;
@@ -311,7 +314,8 @@ namespace EarthOL.BodyThrow
             item.startLocal = LocalPoint(startViewport, StartDepth);
             item.gameObject.transform.localPosition = item.startLocal;
             Vector3 direction = LocalPoint(viewport, PersonLayerDepth) - item.startLocal;
-            item.gameObject.transform.GetChild(0).localRotation = Quaternion.LookRotation(direction, Vector3.up);
+            if (item.dreamGrenade != null) item.dreamGrenade.RenderFlight(m_Camera, 0);
+            else item.gameObject.transform.GetChild(0).localRotation = Quaternion.LookRotation(direction, Vector3.up);
             var renderers = item.gameObject.GetComponentsInChildren<Renderer>();
             Bounds modelBounds = renderers[0].bounds;
             foreach (var renderer in renderers) modelBounds.Encapsulate(renderer.bounds);
@@ -324,6 +328,13 @@ namespace EarthOL.BodyThrow
             }
             item.halfDepth = halfDepth * ProjectileVisualScale;
             m_Items.Add(item);
+            if (item.dreamGrenade != null)
+            {
+                int dreams = 0;
+                for (int i = m_Items.Count - 1; i >= 0; i--)
+                    if (m_Items[i].dreamGrenade != null && ++dreams > MaximumDreamGrenades)
+                    { DestroyItem(m_Items[i]); m_Items.RemoveAt(i); }
+            }
             while (m_Items.Count > MaximumProjectiles)
             {
                 DestroyItem(m_Items[0]);
@@ -340,7 +351,7 @@ namespace EarthOL.BodyThrow
             root.transform.localScale = Vector3.one * ProjectileVisualScale;
             var instance = Object.Instantiate(prefab.gameObject, root.transform);
             PrepareThrownVisual(instance);
-            return new ThrownItem { gameObject = root };
+            return new ThrownItem { gameObject = root, dreamGrenade = instance.GetComponent<DreamGrenadeProjectile>() };
         }
 
         ThrownItem CreateThrownItem(GameObject source, string displayName)
@@ -423,6 +434,7 @@ namespace EarthOL.BodyThrow
                     item.flightProgress = Mathf.Min(1f, item.flightProgress + deltaTime / FlightSeconds);
                     float t = item.flightProgress;
                     item.gameObject.transform.localPosition = FlightPoint(item.startLocal, target, t, item.wheelFlight);
+                    if (item.dreamGrenade != null) item.dreamGrenade.RenderFlight(m_Camera, t);
                     if (t >= 1f && validPerson)
                     {
                         item.attached = true;
@@ -434,6 +446,13 @@ namespace EarthOL.BodyThrow
                 else item.impactAge += Mathf.Max(0f, deltaTime);
                 if (item.attached)
                 {
+                    if (item.dreamGrenade != null)
+                    {
+                        item.gameObject.transform.localPosition = target - Vector3.forward * .025f;
+                        item.dreamGrenade.RenderImpact(m_Camera, item.impactAge);
+                        if (item.dreamGrenade.IsFinished) { DestroyItem(item); m_Items.RemoveAt(i); }
+                        continue;
+                    }
                     float age = Mathf.Min(item.impactAge, ProjectileSlimeMotion.SettleSeconds);
                     Vector3 scale = ProjectileSlimeMotion.ModelScale(age);
                     item.gameObject.transform.localScale = Vector3.Scale(Vector3.one * ProjectileVisualScale, scale);

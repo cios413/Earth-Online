@@ -28,7 +28,7 @@
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <OutputPath>Temp\bin\Debug\</OutputPath>
-    <DefineConstants>UNITY_2022_3_62;UNITY_2022_3;UNITY_2022;UNITY_5_3_OR_NEWER;UNITY_5_4_OR_NEWER;UNITY_5_5_OR_NEWER;UNITY_5_6_OR_NEWER;UNITY_2017_1_OR_NEWER;UNITY_2017_2_OR_NEWER;UNITY_2017_3_OR_NEWER;UNITY_2017_4_OR_NEWER;UNITY_2018_1_OR_NEWER;UNITY_2018_2_OR_NEWER;UNITY_2018_3_OR_NEWER;UNITY_2018_4_OR_NEWER;UNITY_2019_1_OR_NEWER;UNITY_2019_2_OR_NEWER;UNITY_2019_3_OR_NEWER;UNITY_2019_4_OR_NEWER;UNITY_2020_1_OR_NEWER;UNITY_2020_2_OR_NEWER;UNITY_2020_3_OR_NEWER;UNITY_2021_1_OR_NEWER;UNITY_2021_2_OR_NEWER;UNITY_2021_3_OR_NEWER;UNITY_2022_1_OR_NEWER;UNITY_2022_2_OR_NEWER;UNITY_2022_3_OR_NEWER;UNITY_INCLUDE_TESTS;ENABLE_AR;ENABLE_AUDIO;ENABLE_CACHING;ENABLE_CLOTH;ENABLE_EVENT_QUEUE;ENABLE_MICROPHONE;ENABLE_MULTIPLE_DISPLAYS;ENABLE_PHYSICS;ENABLE_TEXTURE_STREAMING;ENABLE_LZMA;ENABLE_UNITYEVENTS;ENABLE_VR;ENABLE_WEBCAM;ENABLE_UNITYWEBREQUEST;ENABLE_WWW;ENABLE_CLOUD_SERVICES;ENABLE_CLOUD_SERVICES_ADS;ENABLE_CLOUD_SERVICES_USE_WEBREQUEST;ENABLE_CLOUD_SERVICES_CRASH_REPORTING;ENABLE_CLOUD_SERVICES_NATIVE_CRASH_REPORTING;ENABLE_CLOUD_SERVICES_PURCHASING;ENABLE_CLOUD_SERVICES_ANALYTICS;ENABLE_CLOUD_SERVICES_BUILD;ENABLE_EDITOR_GAME_SERVICES;ENABLE_UNITY_GAME_SERVICES_ANALYTICS_SUPPORT;ENABLE_CLOUD_LICENSE;ENABLE_EDITOR_HUB_LICENSE;ENABLE_WEBSOCKET_CLIENT;ENABLE_GENERATE_NATIVE_PLUGINS_FOR_ASSEMBLIES_API;ENABLE_DIRECTOR_AUDIO;ENABLE_DIRECTOR_TEXTURE;ENABLE_MANAGED_JOBS;ENABLE_MANAGED_TRANSFORM_JOBS;ENABLE_MANAGED_ANIMATION_JOBS;ENABLE_MANAGED_AUDIO_JOBS;ENABLE_RUNTIME_PERMISSIONS;ENABLE_ENGINE_CODE_STRIPPING;ENABLE_ONSCREEN_KEYBOARD;ENABLE_MANAGED_UNITYTLS;INCLUDE_DYNAMIC_GI;ENABLE_SCRIPTING_GC_WBARRIERS;PLATFORM_SUPPORTS_MONO;ENABLE_VIDEO;ENABLE_ACCELERATOR_CLIENT_DEBUGGING;ENABLE_NAVIGATION_PACKAGE_DEBUG_VISUALIZATION;ENABLE_NAVIGATION_HEIGHTMESH_RUNTIME_SUPPORT;ENABLE_NAVIGATION_UI_REQUIRES_PACKAGE;PLATFORM_ANDROID;TEXTCORE_1_0_OR_NEWER;UNITY_ANDROID;UNITY_ANDROID_API;ENABLE_EGL;ENABLE_NETWORK;ENABLE_RUNTIME_GI;ENABLE_CRUNCH_TEXTURE_COMPRESSION;UNITY_CAN_SHOW_SPLASH_SCREEN;UNITY_HAS_GOOGLEVR;UNITY_HAS_TANGO;ENABLE_SPATIALTRACKING;ENABLE_ETC_COMPRESSION;PLATFORM_EXTENDS_VULKAN_DEVICE;PLATFORM_HAS_MULTIPLE_SWAPCHAINS;UNITY_ANDROID_SUPPORTS_SHADOWFILES;PLATFORM_UPDATES_TIME_OUTSIDE_OF_PLAYER_LOOP;ENABLE_UNITYADS_RUNTIME;UNITY_UNITYADS_API;ENABLE_MONO;NET_STANDARD_2_0;NET_STANDARD;NET_STANDARD_2_1;NETSTANDARD;NETSTANDARD2_1;ENABLE_PROFILER;DEBUG;TRACE;UNITY_ASSERTIONS;UNITY_EDITOR;UNITY_EDITOR_64;UNITY_EDITOR_WIN;ENABLE_UNITY_COLLECTIONS_CHECKS;ENABLE_BURST_AOT;UNITY_TEAM_LICENSE;ENABLE_CUSTOM_RENDER_TEXTURE;ENABLE_DIRECTOR;ENABLE_LOCALIZATION;ENABLE_SPRITES;ENABLE_TERRAIN;ENABLE_TILEMAP;ENABLE_TIMELINE;ENABLE_INPUT_SYSTEM;TEXTCORE_FONT_ENGINE_1_5_OR_NEWER;CSHARP_7_OR_LATER;CSHARP_7_3_OR_NEWER</DefineConstants>
+    <DefineConstants>UNITY_2022_3_62;UNITY_2022_3;UNITY_2022;UNITY_5_3_OR_NEWER;UNITY_5_4_OR_NEWER;UNITY_5_5_OR_NEWER;UNITY_5_6_OR_NEWER;UNITY_2017_1_OR_NEWER;UNITY_2017_2_OR_NEWER;UNITY_2017_3_OR_NEWER;UNITY_2017_4_OR_NEWER;UNITY_2018_1_OR_NEWER;UNITY_2018_2_OR_NEWER;UNITY_2018_3_OR_NEWER;UNITY_2018_4_OR_NEWER;UNITY_2019_1_OR_NEWER;UNITY_2019_2_OR_NEWER;UNITY_2019_3_OR_NEWER;UNITY_2019_4_OR_NEWER;UNITY_2020_1_OR_NEWER;UNITY_2020_2_OR_NEWER;UNITY_2020_3_OR_NEWER;UNITY_2021_1_OR_NEWER;UNITY_2021_2_OR_NEWER;UNITY_2021_3_OR_NEWER;UNITY_2022_1_OR_NEWER;UNITY_2022_2_OR_NEWER;UNITY_2022_3_OR_NEWER;UNITY_INCLUDE_TESTS;ENABLE_AR;ENABLE_AUDIO;ENABLE_CACHING;ENABLE_CLOTH;ENABLE_EVENT_QUEUE;ENABLE_MICROPHONE;ENABLE_MULTIPLE_DISPLAYS;ENABLE_PHYSICS;ENABLE_TEXTURE_STREAMING;ENABLE_LZMA;ENABLE_UNITYEVENTS;ENABLE_VR;ENABLE_WEBCAM;ENABLE_UNITYWEBREQUEST;ENABLE_WWW;ENABLE_CLOUD_SERVICES;ENABLE_CLOUD_SERVICES_ADS;ENABLE_CLOUD_SERVICES_USE_WEBREQUEST;ENABLE_CLOUD_SERVICES_CRASH_REPORTING;ENABLE_CLOUD_SERVICES_NATIVE_CRASH_REPORTING;ENABLE_CLOUD_SERVICES_PURCHASING;ENABLE_CLOUD_SERVICES_ANALYTICS;ENABLE_CLOUD_SERVICES_BUILD;ENABLE_EDITOR_GAME_SERVICES;ENABLE_UNITY_GAME_SERVICES_ANALYTICS_SUPPORT;ENABLE_CLOUD_LICENSE;ENABLE_EDITOR_HUB_LICENSE;ENABLE_WEBSOCKET_CLIENT;ENABLE_GENERATE_NATIVE_PLUGINS_FOR_ASSEMBLIES_API;ENABLE_DIRECTOR_AUDIO;ENABLE_DIRECTOR_TEXTURE;ENABLE_MANAGED_JOBS;ENABLE_MANAGED_TRANSFORM_JOBS;ENABLE_MANAGED_ANIMATION_JOBS;ENABLE_MANAGED_AUDIO_JOBS;ENABLE_RUNTIME_PERMISSIONS;ENABLE_ENGINE_CODE_STRIPPING;ENABLE_ONSCREEN_KEYBOARD;ENABLE_MANAGED_UNITYTLS;INCLUDE_DYNAMIC_GI;ENABLE_SCRIPTING_GC_WBARRIERS;PLATFORM_SUPPORTS_MONO;ENABLE_VIDEO;ENABLE_ACCELERATOR_CLIENT_DEBUGGING;ENABLE_NAVIGATION_PACKAGE_DEBUG_VISUALIZATION;ENABLE_NAVIGATION_HEIGHTMESH_RUNTIME_SUPPORT;ENABLE_NAVIGATION_UI_REQUIRES_PACKAGE;PLATFORM_ANDROID;TEXTCORE_1_0_OR_NEWER;UNITY_ANDROID;UNITY_ANDROID_API;ENABLE_EGL;ENABLE_NETWORK;ENABLE_RUNTIME_GI;ENABLE_CRUNCH_TEXTURE_COMPRESSION;UNITY_CAN_SHOW_SPLASH_SCREEN;UNITY_HAS_GOOGLEVR;UNITY_HAS_TANGO;ENABLE_SPATIALTRACKING;ENABLE_ETC_COMPRESSION;PLATFORM_EXTENDS_VULKAN_DEVICE;PLATFORM_HAS_MULTIPLE_SWAPCHAINS;UNITY_ANDROID_SUPPORTS_SHADOWFILES;PLATFORM_UPDATES_TIME_OUTSIDE_OF_PLAYER_LOOP;ENABLE_UNITYADS_RUNTIME;UNITY_UNITYADS_API;ENABLE_MONO;NET_STANDARD_2_0;NET_STANDARD;NET_STANDARD_2_1;NETSTANDARD;NETSTANDARD2_1;ENABLE_PROFILER;DEBUG;TRACE;UNITY_ASSERTIONS;UNITY_EDITOR;UNITY_EDITOR_64;UNITY_EDITOR_WIN;ENABLE_UNITY_COLLECTIONS_CHECKS;ENABLE_BURST_AOT;UNITY_TEAM_LICENSE;ENABLE_CUSTOM_RENDER_TEXTURE;ENABLE_DIRECTOR;ENABLE_LOCALIZATION;ENABLE_SPRITES;ENABLE_TERRAIN;ENABLE_TILEMAP;ENABLE_TIMELINE;ENABLE_INPUT_SYSTEM;TEXTCORE_FONT_ENGINE_1_5_OR_NEWER;UNITY_UOS_SECURITY;CSHARP_7_OR_LATER;CSHARP_7_3_OR_NEWER</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <NoWarn>0169;USG0001</NoWarn>
@@ -64,55 +64,84 @@
     <Analyzer Include="C:\Program Files\Unity\Hub\Editor\2022.3.62f3c1\Editor\Data\Tools\Unity.SourceGenerators\Unity.Properties.SourceGenerator.dll" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Assets\BodyThrow\Runtime\ProjectileRadialMath.cs" />
-    <Compile Include="Assets\BodyThrow\Runtime\BodyPartProxy.cs" />
     <Compile Include="Assets\Scripts\PokeDeform\PokeInput.cs" />
     <Compile Include="Assets\BodyThrow\Runtime\BodyPoseTracker.cs" />
-    <Compile Include="Assets\EarthOL\Common\GameMode.cs" />
-    <Compile Include="Assets\Scripts\PokeDeform\SceneDiagnostics.cs" />
+    <Compile Include="Assets\EarthOL\Common\AppMode.cs" />
+    <Compile Include="Assets\EarthOL\Combat\ComboConfig.cs" />
     <Compile Include="Assets\BodyThrow\Runtime\Cartoon2DPart.cs" />
     <Compile Include="Assets\ARCore\Runtime\ARCoreModeOverlay.cs" />
+    <Compile Include="Assets\EarthOL\Account\AuthenticationManager.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\FrozenPersonData.cs" />
     <Compile Include="Assets\Scripts\PokeDeform\PokeWarpDeformer.cs" />
+    <Compile Include="Assets\EarthOL\Account\AccountUIBuilder.cs" />
+    <Compile Include="Assets\EarthOL\Combat\CombatConfig.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\PersonDetectionProfiler.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\BodyProjectileCatalog.cs" />
+    <Compile Include="Assets\EarthOL\Features\Detect\IObjectDetector.cs" />
+    <Compile Include="Assets\EarthOL\Features\Detect\SaliencyDetector.cs" />
+    <Compile Include="Assets\EarthOL\Combat\CombatRound.cs" />
+    <Compile Include="Assets\ARCore\Runtime\ARCoreMainSceneBootstrap.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\PersonSlimeSurface.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\ProjectileImpactBounce.cs" />
+    <Compile Include="Assets\ARCore\Runtime\FreeModeWheel.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\BodyPoseDetector.cs" />
+    <Compile Include="Assets\Scripts\PokeDeform\IPokeTarget.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\PersonTrackingManager.cs" />
+    <Compile Include="Assets\Scripts\PokeDeform\PokeDeformer.cs" />
+    <Compile Include="Assets\EarthOL\Account\LoginUI.cs" />
+    <Compile Include="Assets\EarthOL\Account\AccountUIController.cs" />
+    <Compile Include="Assets\EarthOL\Combat\PersonCombatController.cs" />
+    <Compile Include="Assets\Scripts\PokeDeform\PersonModelDeformation.cs" />
+    <Compile Include="Assets\ARCore\Runtime\FreeWheelLayout.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\BodyProxyStabilizer.cs" />
+    <Compile Include="Assets\Scripts\PokeDeform\IPersonModelDeformation.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\CartoonJellyShell.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\BodyPointerFrame.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\BodyProjectileSpawner.cs" />
+    <Compile Include="Assets\EarthOL\Combat\AttackDefinition.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\BodyPoseGeometry.cs" />
+    <Compile Include="Assets\EarthOL\Account\RegisterUI.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\PoseDetectionManager.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\PersonClickController.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\Cartoon2DRig.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\PersonStickerSkinCatalog.cs" />
+    <Compile Include="Assets\ARCore\Runtime\SwipeDeformController.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\PersonInteractionHit.cs" />
+    <Compile Include="Assets\Scripts\PokeDeform\SoftMesh.cs" />
+    <Compile Include="Assets\EarthOL\Account\PlayerSaveData.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\PersonPhotoSilhouetteBuilder.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\Frozen3DPersonController.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\ProjectileRadialMath.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\BodyPartProxy.cs" />
+    <Compile Include="Assets\EarthOL\Common\GameMode.cs" />
+    <Compile Include="Assets\EarthOL\Combat\AttackDamageConfig.cs" />
+    <Compile Include="Assets\Scripts\PokeDeform\SceneDiagnostics.cs" />
     <Compile Include="Assets\EarthOL\Common\ModeOverlay.cs" />
     <Compile Include="Assets\BodyThrow\Runtime\Person2DThrowController.cs" />
     <Compile Include="Assets\BodyThrow\Runtime\PersonShowcaseController.cs" />
-    <Compile Include="Assets\BodyThrow\Runtime\PersonDetectionProfiler.cs" />
-    <Compile Include="Assets\BodyThrow\Runtime\BodyProjectileCatalog.cs" />
     <Compile Include="Assets\BodyThrow\Runtime\PersonDistanceEstimator.cs" />
-    <Compile Include="Assets\EarthOL\Features\Detect\IObjectDetector.cs" />
-    <Compile Include="Assets\EarthOL\Features\Detect\SaliencyDetector.cs" />
-    <Compile Include="Assets\ARCore\Runtime\ARCoreMainSceneBootstrap.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\DreamGrenadeProjectile.cs" />
     <Compile Include="Assets\BodyThrow\Runtime\JellySkeletonPalette.cs" />
     <Compile Include="Assets\BodyThrow\Runtime\PersonDetectionState.cs" />
     <Compile Include="Assets\EarthOL\Features\Detect\PersonOrObjectDetector.cs" />
     <Compile Include="Assets\ARCore\Runtime\PersonDeformationSurface.cs" />
-    <Compile Include="Assets\BodyThrow\Runtime\PersonSlimeSurface.cs" />
-    <Compile Include="Assets\BodyThrow\Runtime\ProjectileImpactBounce.cs" />
-    <Compile Include="Assets\BodyThrow\Runtime\BodyPoseDetector.cs" />
+    <Compile Include="Assets\EarthOL\Account\PlayerDataService.cs" />
     <Compile Include="Assets\BodyThrow\Runtime\BodyProxyRig.cs" />
-    <Compile Include="Assets\Scripts\PokeDeform\IPokeTarget.cs" />
-    <Compile Include="Assets\BodyThrow\Runtime\PersonTrackingManager.cs" />
-    <Compile Include="Assets\Scripts\PokeDeform\PokeDeformer.cs" />
+    <Compile Include="Assets\EarthOL\Combat\CombatSnapshotCapture.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\PersonWorldPositionCalculator.cs" />
     <Compile Include="Assets\BodyThrow\Runtime\PersonKeypointFlow.cs" />
     <Compile Include="Assets\BodyThrow\Runtime\BodyProjectile.cs" />
     <Compile Include="Assets\BodyThrow\Runtime\Cartoon2DCanvas.cs" />
     <Compile Include="Assets\BodyThrow\Runtime\BodyPoseResult.cs" />
     <Compile Include="Assets\EarthOL\Features\Detect\YoloPersonDetector.cs" />
     <Compile Include="Assets\BodyThrow\Runtime\PersonFacingDetector.cs" />
-    <Compile Include="Assets\BodyThrow\Runtime\BodyProxyStabilizer.cs" />
-    <Compile Include="Assets\BodyThrow\Runtime\CartoonJellyShell.cs" />
-    <Compile Include="Assets\BodyThrow\Runtime\BodyPointerFrame.cs" />
-    <Compile Include="Assets\BodyThrow\Runtime\BodyProjectileSpawner.cs" />
+    <Compile Include="Assets\BodyThrow\Runtime\Frozen3DPersonBuilder.cs" />
+    <Compile Include="Assets\EarthOL\Combat\DamageCalculator.cs" />
     <Compile Include="Assets\EarthOL\Features\Detect\ObjectScanner.cs" />
-    <Compile Include="Assets\BodyThrow\Runtime\BodyPoseGeometry.cs" />
     <Compile Include="Assets\BodyThrow\Runtime\Person3DThrowController.cs" />
-    <Compile Include="Assets\BodyThrow\Runtime\PoseDetectionManager.cs" />
-    <Compile Include="Assets\BodyThrow\Runtime\PersonClickController.cs" />
-    <Compile Include="Assets\BodyThrow\Runtime\Cartoon2DRig.cs" />
+    <Compile Include="Assets\EarthOL\Account\CloudSaveManager.cs" />
     <Compile Include="Assets\BodyThrow\Runtime\ProjectileSlimeMotion.cs" />
-    <Compile Include="Assets\Scripts\PokeDeform\SoftMesh.cs" />
     <Compile Include="Assets\BodyThrow\Runtime\BodyGlassRenderer.cs" />
-    <Compile Include="Assets\BodyThrow\Runtime\PersonPhotoSilhouetteBuilder.cs" />
     <Compile Include="Assets\BodyThrow\Runtime\PersonPoseData.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -123,10 +152,14 @@
     <None Include="Assets\Shaders\PersonSlime.shader" />
     <None Include="Assets\Shaders\PokeWarp.shader" />
     <None Include="Assets\Shaders\BodyGlassBlur.shader" />
+    <None Include="Assets\Shaders\DreamBloom.shader" />
     <None Include="Assets\Shaders\PokeDeform.shader" />
     <None Include="Assets\Shaders\PersonShowcasePhoto.shader" />
+    <None Include="Assets\Shaders\PersonShowcaseProjectile.shader" />
     <None Include="Assets\Shaders\PersonWarp.shader" />
     <None Include="Assets\Shaders\BodyDepthOccluder.shader" />
+    <None Include="Assets\Shaders\RetroArrow.shader" />
+    <None Include="Assets\Shaders\DreamGrenade.shader" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="UnityEngine">
@@ -458,7 +491,15 @@
       <Private>False</Private>
     </Reference>
     <Reference Include="Google.Protobuf">
-      <HintPath>Library\PackageCache\com.unity.barracuda@2.0.0\Barracuda\Runtime\Plugins\ProtoBuffer\Google.Protobuf.dll</HintPath>
+      <HintPath>Library\PackageCache\cn.unity.uos.launcher@76a5a7e54c\Plugins\Google.Protobuf.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="System.Runtime.CompilerServices.Unsafe">
+      <HintPath>Library\PackageCache\cn.unity.uos.launcher@76a5a7e54c\Plugins\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>Library\PackageCache\com.unity.nuget.newtonsoft-json@3.2.1\Runtime\Newtonsoft.Json.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.Android.Types">
@@ -965,8 +1006,20 @@
       <HintPath>Library\ScriptAssemblies\Unity.XR.Management.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Unity.UOS.Launcher.Editor">
+      <HintPath>Library\ScriptAssemblies\Unity.UOS.Launcher.Editor.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="endel.nativewebsocket">
+      <HintPath>Library\ScriptAssemblies\endel.nativewebsocket.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Unity.Burst.Editor">
       <HintPath>Library\ScriptAssemblies\Unity.Burst.Editor.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.Services.Core">
+      <HintPath>Library\ScriptAssemblies\Unity.Services.Core.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.XR.ARFoundation.VisualScripting.Editor">
@@ -1013,6 +1066,10 @@
       <HintPath>Library\ScriptAssemblies\Unity.XR.Simulation.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Unity.Services.Core.Environments">
+      <HintPath>Library\ScriptAssemblies\Unity.Services.Core.Environments.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Unity.XR.ARSubsystems">
       <HintPath>Library\ScriptAssemblies\Unity.XR.ARSubsystems.dll</HintPath>
       <Private>False</Private>
@@ -1053,6 +1110,10 @@
       <HintPath>Library\ScriptAssemblies\Unity.TextMeshPro.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Unity.Services.Core.Analytics">
+      <HintPath>Library\ScriptAssemblies\Unity.Services.Core.Analytics.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Unity.XR.Simulation.Editor">
       <HintPath>Library\ScriptAssemblies\Unity.XR.Simulation.Editor.dll</HintPath>
       <Private>False</Private>
@@ -1079,6 +1140,10 @@
     </Reference>
     <Reference Include="Unity.Barracuda.ONNX">
       <HintPath>Library\ScriptAssemblies\Unity.Barracuda.ONNX.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.Services.Authentication.Editor.Shared">
+      <HintPath>Library\ScriptAssemblies\Unity.Services.Authentication.Editor.Shared.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.Barracuda.MacBLAS">
@@ -1113,16 +1178,16 @@
       <HintPath>Library\ScriptAssemblies\Unity.VisualScripting.Core.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="UnityEngine.SpatialTracking">
-      <HintPath>Library\ScriptAssemblies\UnityEngine.SpatialTracking.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="Unity.VisualScripting.Core.Editor">
       <HintPath>Library\ScriptAssemblies\Unity.VisualScripting.Core.Editor.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Unity.Barracuda">
-      <HintPath>Library\ScriptAssemblies\Unity.Barracuda.dll</HintPath>
+    <Reference Include="Unity.Services.CloudSave.Editor">
+      <HintPath>Library\ScriptAssemblies\Unity.Services.CloudSave.Editor.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.SpatialTracking">
+      <HintPath>Library\ScriptAssemblies\UnityEngine.SpatialTracking.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEngine.UI">
@@ -1137,8 +1202,20 @@
       <HintPath>Library\ScriptAssemblies\Unity.Barracuda.BurstBLAS.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Unity.Barracuda">
+      <HintPath>Library\ScriptAssemblies\Unity.Barracuda.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.UOS.CloudSave.Samples">
+      <HintPath>Library\ScriptAssemblies\Unity.UOS.CloudSave.Samples.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Unity.VisualScripting.Flow.Editor">
       <HintPath>Library\ScriptAssemblies\Unity.VisualScripting.Flow.Editor.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.UOS.CloudSave.Runtime">
+      <HintPath>Library\ScriptAssemblies\Unity.UOS.CloudSave.Runtime.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.Timeline">
@@ -1153,6 +1230,10 @@
       <HintPath>Library\ScriptAssemblies\Unity.InputSystem.ForUI.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Unity.Services.Core.Components">
+      <HintPath>Library\ScriptAssemblies\Unity.Services.Core.Components.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Unity.VisualScripting.SettingsProvider.Editor">
       <HintPath>Library\ScriptAssemblies\Unity.VisualScripting.SettingsProvider.Editor.dll</HintPath>
       <Private>False</Private>
@@ -1161,12 +1242,24 @@
       <HintPath>Library\ScriptAssemblies\Unity.TestTools.CodeCoverage.Editor.OpenCover.Model.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Unity.UOS.Common">
+      <HintPath>Library\ScriptAssemblies\Unity.UOS.Common.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.Services.Authentication">
+      <HintPath>Library\ScriptAssemblies\Unity.Services.Authentication.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Unity.VisualScripting.State.Editor">
       <HintPath>Library\ScriptAssemblies\Unity.VisualScripting.State.Editor.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.XR.ARFoundation.InternalUtils">
       <HintPath>Library\ScriptAssemblies\Unity.XR.ARFoundation.InternalUtils.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.Services.Authentication.PlayerAccounts">
+      <HintPath>Library\ScriptAssemblies\Unity.Services.Authentication.PlayerAccounts.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.Mathematics">
@@ -1181,12 +1274,17 @@
       <HintPath>Library\ScriptAssemblies\Unity.Barracuda.Editor.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Unity.Services.CloudSave">
+      <HintPath>Library\ScriptAssemblies\Unity.Services.CloudSave.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Unity.VisualScripting.State">
       <HintPath>Library\ScriptAssemblies\Unity.VisualScripting.State.dll</HintPath>
       <Private>False</Private>
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="Unity.UOS.Encrypt.csproj" />
   </ItemGroup>
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
   <ItemGroup>

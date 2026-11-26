@@ -1,5 +1,9 @@
 {
   "dependencies": {
+    "cn.unity.uos.cloudsave": "https://cnb.cool/unity/uos/CloudSaveSDK.git",
+    "cn.unity.uos.launcher": "https://cnb.cool/unity/uos/UOSLauncher.git",
+    "com.unity.services.authentication": "3.3.3",
+    "com.unity.services.cloudsave": "3.4.2",
     "com.unity.sentis": "2.1.3",
     "com.unity.inputsystem": "1.11.2",
     "com.unity.xr.arcore": "5.1.6",

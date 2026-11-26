@@ -14,6 +14,28 @@ namespace EarthOL.ARCore
         Rect[] m_ButtonRects = s_NoRects;
         Rect m_ShowcaseExitRect;
         GameMode m_Mode = GameMode.Deform;
+        bool m_StickerSkinPickerOpen;
+        Vector2 m_SkinScroll;
+
+        public bool IsStickerSkinPickerOpen => m_StickerSkinPickerOpen && m_Bootstrap != null &&
+            m_Bootstrap.SessionActive && m_Bootstrap.SelectedAppMode == AppMode.Free &&
+            m_Mode == GameMode.Sticker && !IsShowingShowcase;
+
+        public Rect StickerSkinPanelRect
+        {
+            get
+            {
+                float scale = Mathf.Min(Screen.width / 1260f, Screen.height / 2732f);
+                float pad = Mathf.Max(10f, 24f * scale);
+                float side = Mathf.Max(68f, 106f * scale);
+                float right = Mathf.Min(Screen.width - pad, Screen.safeArea.xMax - pad) - side - pad;
+                float width = Mathf.Min(Mathf.Max(200f, Screen.width * .30f), right - pad);
+                float height = Mathf.Min(Mathf.Max(300f, 560f * scale), Screen.height * .58f);
+                float top = Mathf.Clamp(Screen.height * .43f - side * 2f - pad,
+                    Screen.height - Screen.safeArea.yMax + pad, Screen.height - height - pad);
+                return new Rect(Mathf.Max(pad, right - width), top, width, height);
+            }
+        }
 
         public static GameMode CurrentMode => Instance != null ? Instance.m_Mode : GameMode.Deform;
         public static bool IsStickerMode => CurrentMode == GameMode.Sticker;
@@ -48,6 +70,7 @@ namespace EarthOL.ARCore
         {
             if (Instance == null) return false;
             var guiPoint = new Vector2(screenPosition.x, Screen.height - screenPosition.y);
+            if (Instance.IsStickerSkinPickerOpen && Instance.StickerSkinPanelRect.Contains(guiPoint)) return true;
             foreach (var rect in Instance.m_ButtonRects) if (rect.Contains(guiPoint)) return true;
             if (Instance.m_Bootstrap != null && Instance.m_Bootstrap.CombatController != null &&
                 Instance.m_Bootstrap.CombatController.IsPointOnControls(guiPoint)) return true;
@@ -74,8 +97,28 @@ namespace EarthOL.ARCore
 
         public void SelectFeature(GameMode mode) => Apply(mode);
 
+        public void ToggleStickerSkinPicker()
+        {
+            if (m_Bootstrap == null || !m_Bootstrap.SessionActive || m_Bootstrap.SelectedAppMode != AppMode.Free) return;
+            bool open = !IsStickerSkinPickerOpen;
+            Apply(GameMode.Sticker);
+            m_StickerSkinPickerOpen = open;
+            m_SkinScroll = Vector2.zero;
+        }
+
+        public bool SelectStickerSkin(string skinId)
+        {
+            if (!IsStickerSkinPickerOpen || !m_Bootstrap.CartoonCanvas.SelectSkin(skinId)) return false;
+            CloseStickerSkinPicker();
+            m_Bootstrap.ClickController.ResetInput();
+            return true;
+        }
+
+        public void CloseStickerSkinPicker() => m_StickerSkinPickerOpen = false;
+
         void Apply(GameMode mode)
         {
+            if (mode != GameMode.Sticker) CloseStickerSkinPicker();
             m_Mode = mode;
             m_Bootstrap?.SetMode(mode);
         }
@@ -94,6 +137,7 @@ namespace EarthOL.ARCore
         void OnGUI()
         {
             if (m_Bootstrap == null) return;
+            if (EarthOL.Account.AccountUIController.BlocksGameUi) return;
             if (!m_Bootstrap.SessionActive) { DrawEntry(); return; }
             bool presenting = IsShowingShowcase;
             if (presenting) DrawShowcaseBackground();
@@ -102,6 +146,7 @@ namespace EarthOL.ARCore
             if (presenting) DrawShowcaseModel();
             else DrawDetectionStatus();
             m_Bootstrap.FreeWheel.Draw();
+            if (IsStickerSkinPickerOpen) DrawStickerSkinPicker();
             m_Bootstrap.CombatController?.DrawOverlay(presenting);
         }
 
@@ -118,7 +163,7 @@ namespace EarthOL.ARCore
             var style = new GUIStyle(GUI.skin.button) { fontSize = Mathf.Max(14, Mathf.RoundToInt(25f * scale)), wordWrap = true };
             var rects = new List<Rect>(5) { back, detection };
             bool active = m_Bootstrap.DetectionManager.DetectionEnabled;
-            if (GUI.Button(back, "返回选择", style)) { m_Bootstrap.ReturnToSelection(); m_ButtonRects = s_NoRects; return; }
+            if (GUI.Button(back, "返回选择", style)) { CloseStickerSkinPicker(); m_Bootstrap.ReturnToSelection(); m_ButtonRects = s_NoRects; return; }
             if (GUI.Button(detection, active ? "停止识别" : "开始识别", style))
             {
                 if (active) m_Bootstrap.DetectionManager.StopDetection();
@@ -133,7 +178,7 @@ namespace EarthOL.ARCore
                 Color stickerOld = GUI.backgroundColor;
                 GUI.backgroundColor = m_Mode == GameMode.Sticker ? new Color(.35f, .78f, .72f) : new Color(.68f, .75f, .82f);
                 if (GUI.Button(sticker, "人物\n贴图", style))
-                    Apply(m_Mode == GameMode.Sticker ? GameMode.Deform : GameMode.Sticker);
+                    ToggleStickerSkinPicker();
                 GUI.backgroundColor = stickerOld;
             }
             var showcase = new Rect(x, Screen.height * .43f + pad, side, side);
@@ -150,6 +195,64 @@ namespace EarthOL.ARCore
                 if (GUI.Button(m_ShowcaseExitRect, "退出展示", style)) m_Bootstrap.ShowcaseController.ExitPresentation();
             }
             m_ButtonRects = rects.ToArray();
+        }
+
+        void DrawStickerSkinPicker()
+        {
+            Rect panel = StickerSkinPanelRect;
+            float gap = Mathf.Max(8f, panel.width * .045f);
+            float header = Mathf.Max(32f, panel.height * .11f);
+            Color previous = GUI.color;
+            GUI.color = new Color(.055f, .09f, .13f, .98f);
+            GUI.DrawTexture(panel, Texture2D.whiteTexture);
+            GUI.color = previous;
+            var title = new GUIStyle(GUI.skin.label) { fontSize = Mathf.Max(16, Mathf.RoundToInt(panel.width * .078f)),
+                alignment = TextAnchor.MiddleLeft, normal = { textColor = Color.white } };
+            GUI.Label(new Rect(panel.x + gap, panel.y + gap, panel.width * .65f, header), "贴图皮肤", title);
+            if (GUI.Button(new Rect(panel.xMax - gap - header, panel.y + gap, header, header), "×"))
+            { CloseStickerSkinPicker(); return; }
+            var hint = new GUIStyle(GUI.skin.label) { fontSize = Mathf.Max(12, Mathf.RoundToInt(panel.width * .052f)),
+                wordWrap = true, normal = { textColor = new Color(.71f, .83f, .89f) } };
+            GUI.Label(new Rect(panel.x + gap, panel.y + header + gap, panel.width - gap * 2, header), "用于之后生成的贴图", hint);
+
+            var catalog = m_Bootstrap.CartoonCanvas.SkinCatalog;
+            var skins = catalog != null ? catalog.entries : null;
+            Rect list = new Rect(panel.x + gap, panel.y + header * 2 + gap * 2,
+                panel.width - gap * 2, panel.height - header * 3 - gap * 5);
+            float rowHeight = Mathf.Max(72f, panel.width * .42f);
+            int count = skins != null ? skins.Length : 0;
+            m_SkinScroll = GUI.BeginScrollView(list, m_SkinScroll, new Rect(0, 0, list.width - 18f, count * (rowHeight + gap)));
+            bool selected = false;
+            for (int i = 0; i < count; i++)
+            {
+                var skin = skins[i];
+                if (skin == null) continue;
+                Rect row = new Rect(0, i * (rowHeight + gap), list.width - 18f, rowHeight);
+                bool current = m_Bootstrap.CartoonCanvas.SelectedSkinId == skin.id;
+                GUI.color = skin.Available ? current ? new Color(.16f, .50f, .46f) : new Color(.16f, .22f, .29f)
+                    : new Color(.12f, .15f, .19f);
+                GUI.DrawTexture(row, Texture2D.whiteTexture); GUI.color = previous;
+                bool wasEnabled = GUI.enabled; GUI.enabled = wasEnabled && skin.Available;
+                if (GUI.Button(row, GUIContent.none, GUIStyle.none)) selected = SelectStickerSkin(skin.id);
+                GUI.enabled = wasEnabled;
+                Rect icon = new Rect(row.x + gap, row.y + gap, row.height - gap * 2, row.height - gap * 2);
+                if (skin.headArtwork != null)
+                {
+                    var sprite = skin.headArtwork; var uv = sprite.textureRect;
+                    uv = new Rect(uv.x / sprite.texture.width, uv.y / sprite.texture.height,
+                        uv.width / sprite.texture.width, uv.height / sprite.texture.height);
+                    GUI.DrawTextureWithTexCoords(icon, sprite.texture, uv);
+                }
+                else GUI.Label(icon, "?", new GUIStyle(title) { alignment = TextAnchor.MiddleCenter });
+                float textX = icon.xMax + gap;
+                GUI.Label(new Rect(textX, row.y + gap, row.xMax - textX - gap, row.height * .48f), skin.displayName, title);
+                GUI.Label(new Rect(textX, row.y + row.height * .52f, row.xMax - textX - gap, row.height * .40f),
+                    !skin.Available ? "敬请期待" : current ? "已选择" : "选择", hint);
+            }
+            GUI.EndScrollView();
+            if (selected) return;
+            if (GUI.Button(new Rect(panel.x + gap, panel.yMax - header - gap, panel.width - gap * 2, header), "返回形变"))
+                Apply(GameMode.Deform);
         }
 
         void DrawEntry()

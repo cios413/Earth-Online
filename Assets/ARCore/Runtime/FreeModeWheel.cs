@@ -13,7 +13,7 @@ namespace EarthOL.ARCore
         int m_ThumbnailCount = -1;
         int m_TextureWidth, m_TextureHeight;
         float m_Scroll, m_StartScroll;
-        bool m_Pressed, m_Scrolling, m_Dragging;
+        bool m_Pressed, m_Scrolling, m_Dragging, m_HoldCandidate, m_HandlePressed;
         bool m_Expanded, m_WorldPressed, m_WorldMoved;
         float m_Reveal, m_StartReveal, m_WorldPressTime;
         int m_ConsumedFrame = -1, m_WorldPointer, m_WorldPerson;
@@ -25,7 +25,7 @@ namespace EarthOL.ARCore
         public float Reveal => m_Reveal;
         public bool OwnsPointer => m_Pressed || m_WorldPressed || m_ConsumedFrame == Time.frameCount;
         public bool ShowUpArrow => !m_Expanded;
-        public bool ShowDownArrow => m_Pressed && (m_Expanded || m_Dragging);
+        public bool ShowDownArrow => m_Expanded;
         public FreeWheelLayout Layout => new FreeWheelLayout(Screen.width, Screen.height, m_Reveal);
         public bool Visible => m_Bootstrap != null && m_Bootstrap.SessionActive &&
             !m_Bootstrap.ShowcaseController.IsPresenting;
@@ -45,7 +45,7 @@ namespace EarthOL.ARCore
 
         public void ResetInteraction()
         {
-            m_Pressed = m_Scrolling = m_Dragging = m_WorldPressed = m_WorldMoved = false;
+            m_Pressed = m_Scrolling = m_Dragging = m_WorldPressed = m_WorldMoved = m_HoldCandidate = m_HandlePressed = false;
             m_Reveal = m_Expanded ? 1f : 0f;
             if (m_Bootstrap != null && m_Bootstrap.ThrowController != null)
                 m_Scroll = m_Bootstrap.ThrowController.SelectedProjectileIndex;
@@ -60,7 +60,7 @@ namespace EarthOL.ARCore
 
         void Update()
         {
-            if (!Visible || m_Bootstrap.CombatController.BlocksInput) { ResetInteraction(); return; }
+            if (!Visible || m_Bootstrap.CombatController.BlocksInput || m_Bootstrap.CombatController.Holding) { ResetInteraction(); return; }
             if (Screen.width != m_LastWidth || Screen.height != m_LastHeight)
             {
                 ResetInteraction(); m_LastWidth = Screen.width; m_LastHeight = Screen.height;
@@ -96,6 +96,8 @@ namespace EarthOL.ARCore
                 // A new press always begins on a settled, known selected item.
                 m_Scroll = m_StartScroll = SelectedIndex;
                 m_Bootstrap.PersonDeformer.EndPointer();
+                m_HoldCandidate = m_Expanded && m_Bootstrap.CombatController.CanHoldSelectedItem && layout.SlotRect(0).Contains(point);
+                m_HandlePressed = layout.HandleRect.Contains(point) && !layout.Contains(point);
             }
             if (!m_Pressed) { ProcessPersonPointer(frame); return; }
             if (frame.id != m_Pointer) return;
@@ -103,6 +105,27 @@ namespace EarthOL.ARCore
             if (frame.canceled) { ResetInteraction(); return; }
             float dx = point.x - m_Origin.x;
             float dy = point.y - m_Origin.y;
+            if (m_HoldCandidate)
+            {
+                if (frame.released)
+                {
+                    m_HoldCandidate = false;
+                }
+                else if (Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dy)) > Screen.width * .022f)
+                {
+                    m_HoldCandidate = false;
+                    if (dy < 0f && Mathf.Abs(dy) >= Mathf.Abs(dx))
+                    {
+                        m_Pressed = false; m_Scrolling = m_Dragging = false;
+                        m_Bootstrap.CombatController.SetHolding(true);
+                        return;
+                    }
+                }
+                else
+                {
+                    return;
+                }
+            }
             if (!m_Scrolling && !m_Dragging && Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dy)) > Screen.width * .022f)
             {
                 m_Dragging = Mathf.Abs(dy) >= Mathf.Abs(dx) || !m_Expanded;
@@ -115,16 +138,22 @@ namespace EarthOL.ARCore
                 m_Bootstrap.ThrowController.SelectProjectile(Wrap(Mathf.RoundToInt(m_Scroll), ItemCount));
             }
             if (!frame.released) return;
+            if (m_HandlePressed && !m_Scrolling && !m_Dragging)
+            {
+                SetExpanded(!m_Expanded);
+                return;
+            }
             if (m_Dragging) m_Expanded = m_Reveal >= .5f;
             m_Reveal = m_Expanded ? 1f : 0f;
             m_Pressed = false;
             m_Scrolling = m_Dragging = false;
+            m_HoldCandidate = false;
             m_Bootstrap.ThrowController.SelectProjectile(Wrap(Mathf.RoundToInt(m_Scroll), ItemCount));
         }
 
         void ProcessPersonPointer(BodyPointerFrame frame)
         {
-            if (!TapToThrowEnabled) { m_WorldPressed = false; return; }
+            if (!TapToThrowEnabled || (m_Bootstrap.CombatController != null && m_Bootstrap.CombatController.IsSelecting)) { m_WorldPressed = false; return; }
             if (frame.down)
             {
                 m_WorldPressed = false;
@@ -170,7 +199,8 @@ namespace EarthOL.ARCore
                 GUI.color = new Color(.12f, .20f, .28f, layout.SlotOpacity(offset) * .7f);
                 GUI.DrawTexture(rect, m_Disc);
                 GUI.color = new Color(1, 1, 1, layout.SlotOpacity(offset) * (CanInteract ? 1f : .45f));
-                if (m_Thumbnails != null && index < m_Thumbnails.Length && m_Thumbnails[index] != null)
+                bool centerHeld = m_Bootstrap.CombatController.Holding && i == nearest;
+                if (m_Thumbnails != null && index < m_Thumbnails.Length && m_Thumbnails[index] != null && !centerHeld)
                 {
                     float inset = rect.width * .07f;
                     GUI.DrawTexture(new Rect(rect.x + inset, rect.y + inset, rect.width - inset * 2, rect.height - inset * 2), m_Thumbnails[index]);
@@ -194,6 +224,19 @@ namespace EarthOL.ARCore
             GUI.Label(new Rect(0, Screen.height - layout.height * 150f / 2732f + layout.OffsetY, Screen.width, 60f * scale),
                 !m_Bootstrap.DetectionManager.DetectionEnabled ? "开始识别后可投掷" : "左右滑动选物 · 点击人物投掷 · 下推收起", title);
             DrawHandle();
+            if (m_Bootstrap.CombatController != null && m_Bootstrap.CombatController.IsSelecting)
+            {
+                var expanded = new FreeWheelLayout(Screen.width, Screen.height, 1f);
+                Rect handle = expanded.HandleRect;
+                float hintY = Mathf.Max(48f, handle.y - 60f);
+                var hint = new GUIStyle(GUI.skin.label)
+                {
+                    alignment = TextAnchor.MiddleCenter,
+                    fontSize = Mathf.Max(26, Mathf.RoundToInt(46f * expanded.Scale)),
+                    normal = { textColor = new Color(1f, .94f, .62f) }
+                };
+                GUI.Label(new Rect(0f, hintY, Screen.width, 72f), "点击以选中目标", hint);
+            }
         }
 
         void DrawHandle()
@@ -202,13 +245,13 @@ namespace EarthOL.ARCore
             Color previous = GUI.color;
             GUI.color = new Color(.79f, .97f, 1f, .95f);
             Rect handle = Layout.HandleRect;
-            float halfWidth = Mathf.Max(12f, 28f * Layout.Scale);
-            float halfHeight = halfWidth * .5f;
+            float halfWidth = Mathf.Max(20f, 46f * Layout.Scale);
+            float halfHeight = halfWidth * .6f;
             Vector2 center = handle.center;
             bool down = ShowDownArrow;
             Vector2 tip = center + Vector2.up * (down ? halfHeight : -halfHeight);
             float endY = center.y + (down ? -halfHeight : halfHeight);
-            float thickness = Mathf.Max(2.5f, 5f * Layout.Scale);
+            float thickness = Mathf.Max(6f, 10f * Layout.Scale);
             DrawLine(new Vector2(center.x - halfWidth, endY), tip, thickness);
             DrawLine(tip, new Vector2(center.x + halfWidth, endY), thickness);
             GUI.color = previous;

@@ -13,6 +13,7 @@ namespace EarthOL.BodyThrow
             public string displayName;
             public BodyProjectile prefab;
             public Texture2D preview;
+            public bool canHold;
             public Color slimeColor = new Color(.55f, .9f, .15f, 1f);
         }
 
