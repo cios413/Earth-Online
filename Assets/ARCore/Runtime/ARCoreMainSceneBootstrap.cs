@@ -21,6 +21,8 @@ namespace EarthOL.ARCore
         [SerializeField, Range(.3f, 3f)] float personLostSeconds = 1f;
         [SerializeField, Range(2f, 120f)] float personReidentificationSeconds = 60f;
         [SerializeField] bool startPersonDetection = true;
+        [Header("Account")]
+        [SerializeField] bool enableAccountSystem;
         public Camera ARCamera { get; private set; }
         public PersonDeformationSurface PersonDeformer { get; private set; }
         public PersonTrackingManager PersonTracking { get; private set; }
@@ -49,7 +51,7 @@ namespace EarthOL.ARCore
 
         private IEnumerator Start()
         {
-            if (Application.isPlaying)
+            if (Application.isPlaying && enableAccountSystem)
             {
                 var account = EarthOL.Account.AccountUIController.Create(() => SessionActive, ReturnToSelection);
                 var ready = account.WaitUntilReadyAsync();

@@ -588,6 +588,8 @@ namespace EarthOL.EditorTools
             try
             {
                 var bootstrap=new GameObject("BootstrapMigrationTest").AddComponent<ARCoreMainSceneBootstrap>();
+                Check(!(bool)typeof(ARCoreMainSceneBootstrap).GetField("enableAccountSystem",Private).GetValue(bootstrap),
+                    "Account server integration is retained but disabled by default for offline testing");
                 var start=(IEnumerator)Invoke(bootstrap,"Start"); start.MoveNext();
                 Check(bootstrap.DetectionManager==null && !bootstrap.SessionActive,"Entry menu waits before creating recognition");
                 Set(bootstrap,"startPersonDetection",false);
