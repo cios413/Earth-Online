@@ -26,6 +26,7 @@ namespace EarthOL.EditorTools
             PersonHeadJellyValidation();
             PersonShowcaseGeometryValidation();
             SegmentedShowcaseGeometryValidation();
+            ReshapedShowcaseValidation();
             PillowCrossSectionValidation();
             Cartoon2DRigValidation();
             Person3DThrowValidation();
@@ -40,6 +41,76 @@ namespace EarthOL.EditorTools
             Validate();
             UnityEditor.PlayerSettings.enableFrameTimingStats = true;
             AndroidBuild.BuildDevelopmentApk();
+        }
+
+        static void ReshapedShowcaseValidation()
+        {
+            const int size = 160;
+            var photo = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            var pixels = new Color32[size * size];
+            var alpha = new byte[pixels.Length];
+            var pose = PersonPoseData.FromDetection(FullPose(), 0f);
+            var limbs = new[,] { { 5, 7, 9 }, { 6, 8, 10 }, { 11, 13, 15 }, { 12, 14, 16 } };
+            for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                Vector2 uv = new Vector2(x + .5f, y + .5f) / size;
+                bool body = uv.x > .405f && uv.x < .595f && uv.y > .43f && uv.y < .735f;
+                bool head = Vector2.Distance(uv, new Vector2(.5f, .83f)) < .08f ||
+                    (Mathf.Abs(uv.x - .5f) < .034f && uv.y > .72f && uv.y < .82f);
+                for (int i = 0; i < 4; i++)
+                for (int j = 0; j < 2; j++)
+                {
+                    Vector2 a = pose.keypoints[limbs[i, j]], b = pose.keypoints[limbs[i, j + 1]];
+                    Vector2 segment = b - a;
+                    float t = Mathf.Clamp01(Vector2.Dot(uv - a, segment) / segment.sqrMagnitude);
+                    body |= Vector2.Distance(uv, a + t * segment) < .026f;
+                }
+                int index = y * size + x;
+                alpha[index] = (byte)(body || head ? 255 : 0);
+                if (Vector2.Distance(uv, new Vector2(.5f, .30f)) < .009f) alpha[index] = 255;
+                pixels[index] = new Color32((byte)x, (byte)y, 120, 255);
+            }
+            photo.SetPixels32(pixels);
+            photo.Apply();
+            Texture2D composed = null;
+            Mesh mesh = null;
+            try
+            {
+                byte[] reshapedMask = null;
+                PersonPoseData reshapedPose = null;
+                var type = typeof(PersonShowcaseController).Assembly.GetType("EarthOL.BodyThrow.PersonShowcasePose");
+                var compose = type.GetMethod("Compose", BindingFlags.NonPublic | BindingFlags.Static);
+                Vector2[] limbDepth = null;
+                Action<Texture2D, byte[], PersonPoseData, Vector2[]> complete = (texture, mask, result, depth) =>
+                {
+                    composed = texture;
+                    reshapedMask = mask;
+                    reshapedPose = result;
+                    limbDepth = depth;
+                };
+                var crop = new Rect(0f, 0f, 1f, 1f);
+                var operation = (IEnumerator)compose.Invoke(null,
+                    new object[] { photo, alpha, pose, crop, .85f, .065f, 712, complete });
+                while (operation.MoveNext()) { }
+                Check(composed != null && reshapedPose != null, "A visible pose must produce a reshaped photo");
+                var sizeInPixels = new Vector2(composed.width, composed.height);
+                float sourceArm = Vector2.Distance(pose.keypoints[5], pose.keypoints[9]) * size;
+                float reshapedArm = ((reshapedPose.keypoints[5] - reshapedPose.keypoints[9]) * sizeInPixels).magnitude;
+                Check(reshapedArm > sourceArm * 1.10f, "A clear arm must lengthen");
+                mesh = PersonPhotoSilhouetteBuilder.BuildFromMask(composed, reshapedMask, 1.45f, reshapedPose, crop, limbDepth);
+                Check(mesh != null && mesh.subMeshCount == 2 && mesh.bounds.size.z > .01f,
+                    "Reshaped photos must generate both inflated mesh surfaces");
+                Check(CountAlphaComponents(composed.GetPixels32(), composed.width, composed.height) == 1,
+                    "Reshaping must keep the hips attached and remove floating fragments");
+                Debug.Log("[PersonValidation] ReshapedShowcaseValidation PASS");
+            }
+            finally
+            {
+                Object.DestroyImmediate(photo);
+                if (composed != null) Object.DestroyImmediate(composed);
+                if (mesh != null) Object.DestroyImmediate(mesh);
+            }
         }
 
         public static BodyPoseResult FullPose(float x = 0.5f, float shift = 0f)

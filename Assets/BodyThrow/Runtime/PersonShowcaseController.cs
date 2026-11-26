@@ -33,6 +33,8 @@ namespace EarthOL.BodyThrow
         int m_PersonId = -1;
         float m_PressTime;
         float m_ModelHeight = 1.45f;
+        [SerializeField, Range(0f, 1f)] float m_PoseDistortion = .85f;
+        [SerializeField, Range(0f, .25f)] float m_LimbClearance = .065f;
         float m_Yaw;
         Vector2 m_LastPointer;
         bool m_InteractionEnabled;
@@ -235,8 +237,40 @@ namespace EarthOL.BodyThrow
                 yield break;
             }
             yield return null;
+            Texture2D reshaped = null;
+            byte[] reshapedAlpha = null;
+            PersonPoseData reshapedPose = null;
+            Vector2[] limbDepth = null;
+            var composition = PersonShowcasePose.Compose(m_Photo, alpha, person, photoBounds,
+                m_PoseDistortion, m_LimbClearance, UnityEngine.Random.Range(0, int.MaxValue),
+                (texture, mask, pose, depth) =>
+                {
+                    reshaped = texture;
+                    reshapedAlpha = mask;
+                    reshapedPose = pose;
+                    limbDepth = depth;
+                });
+            try { while (composition.MoveNext()) yield return null; }
+            finally { (composition as IDisposable)?.Dispose(); }
             float segmentationEnd = (float)timer.Elapsed.TotalMilliseconds;
-            m_ModelMesh = PersonPhotoSilhouetteBuilder.BuildFromMask(m_Photo, alpha, m_ModelHeight, person, photoBounds);
+            if (reshaped != null)
+            {
+                try
+                {
+                    m_ModelMesh = PersonPhotoSilhouetteBuilder.BuildFromMask(reshaped, reshapedAlpha, m_ModelHeight,
+                        reshapedPose, new Rect(0f, 0f, 1f, 1f), limbDepth);
+                    if (m_ModelMesh != null)
+                    {
+                        DestroyOwned(m_Photo);
+                        m_Photo = reshaped;
+                        alpha = reshapedAlpha;
+                        reshaped = null;
+                    }
+                }
+                finally { if (reshaped != null) DestroyOwned(reshaped); }
+            }
+            if (m_ModelMesh == null)
+                m_ModelMesh = PersonPhotoSilhouetteBuilder.BuildFromMask(m_Photo, alpha, m_ModelHeight, person, photoBounds);
             float meshMs = (float)timer.Elapsed.TotalMilliseconds - segmentationEnd;
             int foregroundPixels = 0;
             foreach (byte coverage in alpha) if (coverage >= 128) foregroundPixels++;
@@ -350,6 +384,15 @@ namespace EarthOL.BodyThrow
             m_PreviewCamera.orthographic = true;
             m_PreviewCamera.orthographicSize = m_ModelHeight * 0.64f;
             m_PreviewCamera.aspect = width / (float)height;
+            if (m_ModelMesh != null)
+            {
+                Bounds modelBounds = m_ModelMesh.bounds;
+                Vector3 reach = modelBounds.extents + new Vector3(Mathf.Abs(modelBounds.center.x),
+                    Mathf.Abs(modelBounds.center.y), Mathf.Abs(modelBounds.center.z));
+                float horizontal = new Vector2(reach.x, reach.z).magnitude;
+                m_PreviewCamera.orthographicSize = Mathf.Max(m_PreviewCamera.orthographicSize,
+                    1.08f * Mathf.Max(reach.y, horizontal / m_PreviewCamera.aspect));
+            }
             m_PreviewCamera.nearClipPlane = 0.1f;
             m_PreviewCamera.farClipPlane = 6f;
             m_PreviewCamera.cullingMask = 1 << ShowcaseLayer;

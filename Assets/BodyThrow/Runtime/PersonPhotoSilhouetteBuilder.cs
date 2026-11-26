@@ -33,7 +33,7 @@ namespace EarthOL.BodyThrow
         }
 
         public static Mesh BuildFromMask(Texture2D photo, byte[] alpha, float modelHeight,
-            PersonPoseData pose, Rect photoBounds)
+            PersonPoseData pose, Rect photoBounds, Vector2[] limbDepth = null)
         {
             if (photo == null || alpha == null || alpha.Length != photo.width * photo.height) return null;
             Color32[] pixels = photo.GetPixels32();
@@ -116,7 +116,16 @@ namespace EarthOL.BodyThrow
                 float angle = Mathf.Atan2(point.y, point.x);
                 float fold = .5f - .5f * Mathf.Cos(angle * 12f + .18f * Mathf.Sin(angle * 3f));
                 float crease = .045f * fold * Mathf.Exp(-distance[i] / (stepY * 3.5f));
-                positions[i].z = -halfDepth * fullness * (1f - crease);
+                float depth = halfDepth * fullness * (1f - crease);
+                if (limbDepth != null)
+                {
+                    Vector2 uv = coordinates[i];
+                    int px = Mathf.Clamp((int)(uv.x * photo.width), 0, photo.width - 1);
+                    int py = Mathf.Clamp((int)(uv.y * photo.height), 0, photo.height - 1);
+                    Vector2 profile = limbDepth[py * photo.width + px];
+                    depth = depth * (1f - profile.y) + profile.x * modelHeight / photo.height;
+                }
+                positions[i].z = -depth;
             }
 
             var vertices = new List<Vector3>();
