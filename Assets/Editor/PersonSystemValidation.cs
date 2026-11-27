@@ -628,6 +628,9 @@ namespace EarthOL.EditorTools
                 manager.DetectionFramesPerSecond=10f;
                 Check(Mathf.Abs(manager.DetectionFramesPerSecond-10)<.001f,"Inference Hz configurable");
                 manager.StartDetection(); Check(manager.DetectionEnabled,"Start Detection enables algorithms");
+                int firstSession=manager.DetectionSessionCount;
+                string firstDiagnosticSession=manager.DiagnosticSessionId;
+                Check(firstSession==1 && !string.IsNullOrEmpty(firstDiagnosticSession),"Each detection start creates a diagnostic session");
                 Set(manager,"m_NextDetection",12.2f);
                 Check(!manager.ShouldStartInference(12.1f) && manager.ShouldStartInference(12.2f),"Inference cap enforced independent of render frames");
                 tracking.UpdateDetections(new[]{FullPose()},Time.realtimeSinceStartup);
@@ -640,9 +643,20 @@ namespace EarthOL.EditorTools
                 Check(manager.DetectionCount==detection && manager.CaptureCount==capture && manager.TensorInputCount==tensor &&
                     tracking.TrackingUpdateCount==ticks && tracking.FlowUpdateCount==flow,"Stop must halt capture, tensors, inference, decode, tracking and flow");
                 manager.StartDetection(); Check(manager.DetectionEnabled,"Restart resumes detection");
+                Check(manager.DetectionSessionCount==firstSession+1 && manager.DiagnosticSessionId!=firstDiagnosticSession,
+                    "Restarted detection must start a distinct diagnostic and profiler session");
                 tracking.UpdateDetections(new[]{FullPose()},Time.realtimeSinceStartup);
                 Check(tracking.Count==1 && tracking.Find(originalId)!=null,
                     "Restarting detection must resume the existing track and person ID");
+                float holdStart=Time.realtimeSinceStartup;
+                tracking.HoldTracks(holdStart);
+                tracking.Tick(holdStart+30f);
+                Check(tracking.Pick(new Vector2(.5f,.5f))!=null,
+                    "A selected person's visible track must remain available during showcase generation");
+                tracking.ResumeHeldTracks(holdStart+30f);
+                tracking.Tick(holdStart+30.1f);
+                Check(tracking.Find(originalId)!=null && tracking.Find(originalId).trackingConfidence>.2f,
+                    "A held track must resume without expiring after showcase generation");
                 manager.StopDetection();
                 // Real execution timing of the lightweight update path, not an inferred speed claim.
                 tracking.UpdateDetections(new[]{FullPose(.3f),FullPose(.7f)},10f);
@@ -680,6 +694,28 @@ namespace EarthOL.EditorTools
                 timer.Stop();
                 Check(callback && steps>=1,"Inference must execute via a yielded schedule, not a hidden per-frame full Execute");
                 Debug.Log($"[PersonValidation] Existing decoder tests and actual scheduled raw-model execution PASS: yields={steps} desktopWall={timer.Elapsed.TotalMilliseconds:F1}ms.");
+            }
+
+            using (var detector=new BodyPoseDetector())
+            {
+                var load=detector.Load(); while(load.MoveNext()) { }
+                Invoke(detector,"SwitchToCpuBackend");
+                Check(detector.Ready && detector.BackendName=="CPU","GPU readback recovery must leave a usable CPU worker");
+                bool callback=false; int steps=0;
+                var schedule=detector.DetectScheduled(new Color32[192*384],192,384,6,results=>
+                {
+                    Check(results.Length==0,"CPU retry must decode the same blank frame without inventing a person");
+                    callback=true;
+                });
+                var timer=Stopwatch.StartNew();
+                while(schedule.MoveNext())
+                {
+                    steps++;
+                    Check(timer.ElapsedMilliseconds<10000,"CPU fallback pose inference timed out");
+                }
+                timer.Stop();
+                Check(callback && steps>=1,"CPU fallback must finish through the scheduled inference path");
+                Debug.Log($"[PersonValidation] CPU readback fallback schedule PASS: yields={steps} desktopWall={timer.Elapsed.TotalMilliseconds:F1}ms.");
             }
         }
 

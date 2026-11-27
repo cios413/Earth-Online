@@ -14,14 +14,18 @@ namespace EarthOL.BodyThrow
         readonly FrameTiming[] m_Timings = new FrameTiming[1];
         float m_Started = -1f;
         bool m_Done;
-        int m_Frames, m_TimingFrames, m_GpuFrames, m_StartDetectionCount;
+        int m_ObservedSession = -1;
+        int m_Frames, m_TimingFrames, m_GpuFrames;
+        int m_StartDetectionCount, m_StartCaptureCount, m_StartTensorInputCount, m_StartTrackingSamples;
         double m_CpuMilliseconds, m_GpuMilliseconds;
+        float m_StartInferenceMilliseconds, m_StartTrackingMilliseconds;
         long m_GcBytes, m_MaxMemory;
-        string m_ProfilePath;
+        string m_ProfilePath, m_DiagnosticSession;
 
         [Serializable] sealed class Report
         {
-            public string unity, device, gpu, graphicsAPI, binaryProfile;
+            public string unity, device, gpu, graphicsAPI, binaryProfile, diagnosticSession;
+            public int detectionSession;
             public float seconds, configuredDetectionHz, actualDetectionHz, inferenceWallMs, trackingCpuMs;
             public int renderedFrames, detectionsInWindow, captureCount, tensorInputCount, nativeFrameTimingSamples, gpuTimingSamples;
             public double cpuFrameMs, gpuFrameMs;
@@ -35,13 +39,34 @@ namespace EarthOL.BodyThrow
         void Update()
         {
 #if DEVELOPMENT_BUILD
-            if (Application.isEditor || !recordDevelopmentProfile || m_Detection == null || m_Done) return;
+            if (Application.isEditor || !recordDevelopmentProfile || m_Detection == null) return;
+            if (m_ObservedSession != m_Detection.DetectionSessionCount)
+            {
+                if (m_Started >= 0f && !m_Done) Finish();
+                ResetSample();
+                m_ObservedSession = m_Detection.DetectionSessionCount;
+            }
+
+            if (!m_Detection.DetectionEnabled)
+            {
+                if (m_Started >= 0f && !m_Done) Finish();
+                return;
+            }
+            if (m_Done) return;
+
             if (m_Started < 0f)
             {
                 if (m_Detection.DetectionCount < 3) return;
                 m_Started = Time.realtimeSinceStartup;
                 m_StartDetectionCount = m_Detection.DetectionCount;
-                m_ProfilePath = Path.Combine(Application.persistentDataPath, "person-system-profiler.raw");
+                m_StartCaptureCount = m_Detection.CaptureCount;
+                m_StartTensorInputCount = m_Detection.TensorInputCount;
+                m_StartTrackingSamples = m_Detection.TrackingSampleCount;
+                m_StartInferenceMilliseconds = m_Detection.TotalInferenceMilliseconds;
+                m_StartTrackingMilliseconds = m_Detection.TotalTrackingMilliseconds;
+                m_DiagnosticSession = m_Detection.DiagnosticSessionId;
+                m_ProfilePath = Path.Combine(Application.persistentDataPath,
+                    "person-system-profiler-" + m_Detection.DetectionSessionCount + ".raw");
                 Profiler.logFile = m_ProfilePath;
                 Profiler.enableBinaryLog = true;
                 Profiler.enabled = true;
@@ -65,6 +90,18 @@ namespace EarthOL.BodyThrow
 #endif
         }
 
+        void ResetSample()
+        {
+            m_Started = -1f;
+            m_Done = false;
+            m_Frames = m_TimingFrames = m_GpuFrames = 0;
+            m_StartDetectionCount = m_StartCaptureCount = m_StartTensorInputCount = m_StartTrackingSamples = 0;
+            m_StartInferenceMilliseconds = m_StartTrackingMilliseconds = 0f;
+            m_CpuMilliseconds = m_GpuMilliseconds = 0;
+            m_GcBytes = m_MaxMemory = 0;
+            m_ProfilePath = m_DiagnosticSession = null;
+        }
+
         void Finish()
         {
             if (m_Started < 0f || m_Done) return;
@@ -73,16 +110,22 @@ namespace EarthOL.BodyThrow
             Profiler.enableBinaryLog = false;
             float seconds = Time.realtimeSinceStartup - m_Started;
             int detections = m_Detection.DetectionCount - m_StartDetectionCount;
+            int trackingSamples = m_Detection.TrackingSampleCount - m_StartTrackingSamples;
+            float inferenceMilliseconds = m_Detection.TotalInferenceMilliseconds - m_StartInferenceMilliseconds;
+            float trackingMilliseconds = m_Detection.TotalTrackingMilliseconds - m_StartTrackingMilliseconds;
             var report = new Report
             {
                 unity = Application.unityVersion, device = SystemInfo.deviceModel,
                 gpu = SystemInfo.graphicsDeviceName, graphicsAPI = SystemInfo.graphicsDeviceType.ToString(),
-                binaryProfile = m_ProfilePath, seconds = seconds, configuredDetectionHz = m_Detection.DetectionFramesPerSecond,
+                binaryProfile = m_ProfilePath, diagnosticSession = m_DiagnosticSession,
+                detectionSession = m_ObservedSession,
+                seconds = seconds, configuredDetectionHz = m_Detection.DetectionFramesPerSecond,
                 actualDetectionHz = detections / Mathf.Max(.001f, seconds),
-                inferenceWallMs = m_Detection.AverageInferenceMilliseconds,
-                trackingCpuMs = m_Detection.AverageTrackingMilliseconds,
-                renderedFrames = m_Frames, detectionsInWindow = detections, captureCount = m_Detection.CaptureCount,
-                tensorInputCount = m_Detection.TensorInputCount, nativeFrameTimingSamples = m_TimingFrames,
+                inferenceWallMs = detections > 0 ? inferenceMilliseconds / detections : 0f,
+                trackingCpuMs = trackingSamples > 0 ? trackingMilliseconds / trackingSamples : 0f,
+                renderedFrames = m_Frames, detectionsInWindow = detections,
+                captureCount = m_Detection.CaptureCount - m_StartCaptureCount,
+                tensorInputCount = m_Detection.TensorInputCount - m_StartTensorInputCount, nativeFrameTimingSamples = m_TimingFrames,
                 gpuTimingSamples = m_GpuFrames, cpuFrameMs = m_TimingFrames > 0 ? m_CpuMilliseconds / m_TimingFrames : -1,
                 gpuFrameMs = m_GpuFrames > 0 ? m_GpuMilliseconds / m_GpuFrames : -1,
                 totalFrameGcBytes = m_GcBytes, peakAllocatedMemoryBytes = m_MaxMemory,

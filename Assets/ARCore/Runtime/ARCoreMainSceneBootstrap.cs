@@ -118,7 +118,7 @@ namespace EarthOL.ARCore
             CartoonCanvas.DrawPersonMarkers = SelectedAppMode == AppMode.Free;
             m_Overlay.SelectFeature(GameMode.Deform);
             FreeWheel.SetExpanded(false);
-            if (startPersonDetection) DetectionManager.StartDetection();
+            if (startPersonDetection) DetectionManager.StartDetectionScheduled();
         }
 
         public void ReturnToSelection()
@@ -276,7 +276,7 @@ namespace EarthOL.ARCore
             // Defer one frame so the heavy model reload does not stall the OnGUI button callback.
             yield return null;
             DetectionManager.StopDetection();
-            DetectionManager.StartDetection();
+            DetectionManager.StartDetectionScheduled();
         }
         void OnShowcaseProjectileChanged(GameObject source, Texture2D preview)
         {

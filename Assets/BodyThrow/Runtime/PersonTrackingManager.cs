@@ -32,6 +32,7 @@ namespace EarthOL.BodyThrow
         readonly bool[] m_FlowMatches = new bool[17];
         int m_NextId = 1;
         float m_PausedAt = -1f;
+        float m_HeldAt = -1f;
         public int TrackingUpdateCount { get; private set; }
         public int FlowUpdateCount { get; private set; }
         public int FlowRejectionCount { get; private set; }
@@ -74,9 +75,30 @@ namespace EarthOL.BodyThrow
             RefreshViews();
         }
 
+        public void HoldTracks(float timestamp)
+        {
+            if (m_HeldAt >= 0f) return;
+            m_HeldAt = timestamp;
+        }
+
+        public void ResumeHeldTracks(float timestamp)
+        {
+            if (m_HeldAt < 0f) return;
+            float heldDuration = Mathf.Max(0f, timestamp - m_HeldAt);
+            foreach (var track in m_Tracks)
+            {
+                track.lastDetection += heldDuration;
+                track.lastUpdate += heldDuration;
+                track.pose.timestamp += heldDuration;
+            }
+            m_HeldAt = -1f;
+            RefreshViews();
+        }
+
         public void Tick(float timestamp)
         {
             TrackingUpdateCount++;
+            if (m_HeldAt >= 0f) return;
             for (int i = m_Tracks.Count - 1; i >= 0; i--)
             {
                 var track = m_Tracks[i];
@@ -198,6 +220,7 @@ namespace EarthOL.BodyThrow
             m_Tracks.Clear();
             m_Views.Clear();
             m_PausedAt = -1f;
+            m_HeldAt = -1f;
             NeedsDetectionCorrection = false;
         }
 

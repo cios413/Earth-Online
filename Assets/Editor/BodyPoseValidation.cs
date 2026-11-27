@@ -22,6 +22,7 @@ namespace EarthOL.EditorTools
 
         public static void Validate()
         {
+            ValidateReadbackFallbackPolicy();
             ValidateInput();
             foreach (int anchor in new[] { 1378, 3055, 3464 })
                 foreach (bool portrait in new[] { true, false })
@@ -30,6 +31,21 @@ namespace EarthOL.EditorTools
             ValidateModel();
             Debug.Log("[PoseValidation] PASS: NCHW RGB orientation, letterbox round trips, YOLO26 box/pose channels, " +
                 "confidence filtering, head/torso fitting and model inference.");
+        }
+
+        static void ValidateReadbackFallbackPolicy()
+        {
+            var method = typeof(BodyPoseDetector).GetMethod("ShouldFallbackToCpu",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Check((bool)method.Invoke(null, new object[]
+                { BackendType.GPUCompute, new InvalidOperationException("GPU readback failed") }),
+                "GPU tensor readback failure must select the CPU retry path");
+            Check(!(bool)method.Invoke(null, new object[]
+                { BackendType.CPU, new InvalidOperationException("CPU decode failed") }),
+                "CPU inference failures must propagate instead of retrying on CPU again");
+            Check(!(bool)method.Invoke(null, new object[]
+                { BackendType.GPUCompute, new FormatException("Unexpected output shape") }),
+                "Model output format failures must not be masked as GPU readback failures");
         }
 
         static void ValidateInput()

@@ -6,6 +6,7 @@ namespace EarthOL.BodyThrow
 {
     internal static class PersonShowcasePose
     {
+        const int WorkSliceMilliseconds = 8;
         static readonly int[,] Joints = { { 5, 7, 9 }, { 6, 8, 10 }, { 11, 13, 15 }, { 12, 14, 16 } };
 
         sealed class Limb
@@ -125,7 +126,7 @@ namespace EarthOL.BodyThrow
                             Mathf.Max(rect.xMax, x + 1) - Mathf.Min(rect.xMin, x),
                             Mathf.Max(rect.yMax, y + 1) - Mathf.Min(rect.yMin, y));
                 }
-                if (slice.ElapsedMilliseconds < 4) continue;
+                if (slice.ElapsedMilliseconds < WorkSliceMilliseconds) continue;
                 yield return null;
                 slice.Restart();
             }
@@ -182,7 +183,7 @@ namespace EarthOL.BodyThrow
                     pixels[to] = color;
                     changed = true;
                 }
-                if (slice.ElapsedMilliseconds < 4) continue;
+                if (slice.ElapsedMilliseconds < WorkSliceMilliseconds) continue;
                 yield return null;
                 slice.Restart();
             }
@@ -208,7 +209,7 @@ namespace EarthOL.BodyThrow
                         if (!own && mask[y * outWidth + x] >= 96) row++;
                         occupancy[(y + 1) * pitch + x + 1] = occupancy[y * pitch + x + 1] + row;
                     }
-                    if (slice.ElapsedMilliseconds < 4) continue;
+                    if (slice.ElapsedMilliseconds < WorkSliceMilliseconds) continue;
                     yield return null;
                     slice.Restart();
                 }
@@ -274,7 +275,7 @@ namespace EarthOL.BodyThrow
                                 break;
                             }
                         }
-                        if (slice.ElapsedMilliseconds < 4) continue;
+                        if (slice.ElapsedMilliseconds < WorkSliceMilliseconds) continue;
                         yield return null;
                         slice.Restart();
                     }
@@ -312,7 +313,7 @@ namespace EarthOL.BodyThrow
                             depth[index] = new Vector2(halfDepth * rootBlend, rootBlend);
                             mask[index] = Math.Max(mask[index], coverage);
                         }
-                        if (slice.ElapsedMilliseconds < 4) continue;
+                        if (slice.ElapsedMilliseconds < WorkSliceMilliseconds) continue;
                         yield return null;
                         slice.Restart();
                     }
@@ -369,7 +370,7 @@ namespace EarthOL.BodyThrow
                     pixels[start + x] = Color32.Lerp(rowPixels[left], rowPixels[right], a + b > 0f ? b / (a + b) : t);
                     depth[start + x] = Vector2.Lerp(rowDepth[left], rowDepth[right], t);
                 }
-                if (slice.ElapsedMilliseconds < 4) continue;
+                if (slice.ElapsedMilliseconds < WorkSliceMilliseconds) continue;
                 yield return null;
                 slice.Restart();
             }
@@ -539,7 +540,7 @@ namespace EarthOL.BodyThrow
                     seed = index;
                     closest = distance;
                 }
-                if (slice.ElapsedMilliseconds < 4) continue;
+                if (slice.ElapsedMilliseconds < WorkSliceMilliseconds) continue;
                 yield return null;
                 slice.Restart();
             }
@@ -557,7 +558,7 @@ namespace EarthOL.BodyThrow
                 if (x + 1 < width) Visit(index + 1);
                 if (y > 0) Visit(index - width);
                 if (y + 1 < height) Visit(index + width);
-                if ((++connected & 511) != 0 || slice.ElapsedMilliseconds < 4) continue;
+                if ((++connected & 511) != 0 || slice.ElapsedMilliseconds < WorkSliceMilliseconds) continue;
                 yield return null;
                 slice.Restart();
             }
@@ -572,7 +573,7 @@ namespace EarthOL.BodyThrow
                         y > 0 && keep[i - width] || y + 1 < height && keep[i + width])) continue;
                     alpha[i] = 0;
                 }
-                if (slice.ElapsedMilliseconds < 4) continue;
+                if (slice.ElapsedMilliseconds < WorkSliceMilliseconds) continue;
                 yield return null;
                 slice.Restart();
             }

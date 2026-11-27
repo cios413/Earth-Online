@@ -167,7 +167,7 @@ namespace EarthOL.ARCore
             if (GUI.Button(detection, active ? "停止识别" : "开始识别", style))
             {
                 if (active) m_Bootstrap.DetectionManager.StopDetection();
-                else m_Bootstrap.DetectionManager.StartDetection();
+                else m_Bootstrap.DetectionManager.StartDetectionScheduled();
             }
             float side = Mathf.Max(68f, 106f * scale);
             float x = Mathf.Min(Screen.width - pad, safe.xMax - pad) - side;
@@ -291,7 +291,16 @@ namespace EarthOL.ARCore
             float scale = Mathf.Min(Screen.width / 1260f, Screen.height / 2732f);
             float pad = Mathf.Max(10f, 24f * scale);
             float top = Mathf.Max(pad, Screen.height - Screen.safeArea.yMax + pad) + Mathf.Max(44f, 76f * scale) + pad * .5f;
-            string text = $"{manager.State}   人物 {manager.TrackedPersonCount}   " +
+            string state = manager.State switch
+            {
+                PersonDetectionState.LoadingModel => "加载模型",
+                PersonDetectionState.WaitingForCamera => "等待相机",
+                PersonDetectionState.SearchingForPeople => "搜索人物",
+                PersonDetectionState.BuildingShowcase => "生成模型",
+                PersonDetectionState.Error => "识别错误",
+                _ => "运行中"
+            };
+            string text = $"{state}   人物 {manager.TrackedPersonCount}   " +
                 $"YOLO {manager.MeasuredDetectionFramesPerSecond:F1}/{manager.EffectiveDetectionFramesPerSecond:F1} Hz";
             var style = new GUIStyle(GUI.skin.label)
             {

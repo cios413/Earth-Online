@@ -184,7 +184,8 @@ namespace EarthOL.BodyThrow
             catch (Exception exception)
             {
                 Debug.LogException(exception);
-                m_Detection?.RecordDiagnostic("showcase_build_error", personId: m_PersonId, flush: true);
+                m_Detection?.RecordDiagnostic("showcase_build_error", personId: m_PersonId,
+                    error: exception.ToString(), segmentationBackend: m_Segmenter.BackendName, flush: true);
                 CancelPress();
                 m_Segmenter.Dispose();
                 return;
@@ -232,11 +233,12 @@ namespace EarthOL.BodyThrow
             {
                 m_Detection.RecordDiagnostic("showcase_mask_failed", personId: person.personId,
                     width: m_Photo.width, height: m_Photo.height, captureMs: captureMs,
-                    segmentationMs: segmentationMs, flush: true);
+                    segmentationMs: segmentationMs, segmentationBackend: m_Segmenter.BackendName, flush: true);
                 Debug.LogWarning("[PersonShowcase] No matching silhouette in captured photo.");
                 yield break;
             }
             yield return null;
+            float composeStart = (float)timer.Elapsed.TotalMilliseconds;
             Texture2D reshaped = null;
             byte[] reshapedAlpha = null;
             PersonPoseData reshapedPose = null;
@@ -252,7 +254,8 @@ namespace EarthOL.BodyThrow
                 });
             try { while (composition.MoveNext()) yield return null; }
             finally { (composition as IDisposable)?.Dispose(); }
-            float segmentationEnd = (float)timer.Elapsed.TotalMilliseconds;
+            float composeMs = (float)timer.Elapsed.TotalMilliseconds - composeStart;
+            float composeEnd = (float)timer.Elapsed.TotalMilliseconds;
             if (reshaped != null)
             {
                 try
@@ -271,7 +274,7 @@ namespace EarthOL.BodyThrow
             }
             if (m_ModelMesh == null)
                 m_ModelMesh = PersonPhotoSilhouetteBuilder.BuildFromMask(m_Photo, alpha, m_ModelHeight, person, photoBounds);
-            float meshMs = (float)timer.Elapsed.TotalMilliseconds - segmentationEnd;
+            float meshMs = (float)timer.Elapsed.TotalMilliseconds - composeEnd;
             int foregroundPixels = 0;
             foreach (byte coverage in alpha) if (coverage >= 128) foregroundPixels++;
             m_Detection.RecordDiagnostic(m_ModelMesh == null ? "showcase_mesh_failed" : "showcase_mesh",
@@ -279,7 +282,8 @@ namespace EarthOL.BodyThrow
                 vertices: m_ModelMesh != null ? m_ModelMesh.vertexCount : 0,
                 depth: m_ModelMesh != null ? m_ModelMesh.bounds.size.z : 0f,
                 foregroundPixels: foregroundPixels, elapsedMs: (float)timer.Elapsed.TotalMilliseconds,
-                captureMs: captureMs, segmentationMs: segmentationMs, meshMs: meshMs, flush: true);
+                captureMs: captureMs, segmentationMs: segmentationMs, composeMs: composeMs,
+                meshMs: meshMs, segmentationBackend: m_Segmenter.BackendName, flush: true);
             if (m_ModelMesh == null) yield break;
             yield return null;
             CreateModelObject();
@@ -493,6 +497,7 @@ namespace EarthOL.BodyThrow
             if (!m_Presenting) return;
             m_Presenting = false;
             ClearSession();
+            m_Detection?.RequestFreshDetection();
         }
 
         public void ResetForDetectionStop()

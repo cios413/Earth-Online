@@ -39,12 +39,15 @@ namespace EarthOL.BodyThrow
         float m_MaxFrameMilliseconds, m_MaxScheduleMilliseconds;
         bool m_Enabled, m_HasPreviousGray, m_Paused;
         bool m_ShowcaseBuilding;
+        Coroutine m_ModelLoadCoroutine;
+        long m_ModelLoadStarted;
         bool m_ReadbackPending, m_ReadbackFlow, m_UseAsyncReadback;
         float m_ReadbackTimestamp, m_ReadbackStarted;
         float m_ReadyFrameTimestamp = -1f, m_ReadyFrameAvailable;
         float m_DetectionCaptureMs, m_DetectionQueueMs, m_DetectionInferenceStarted;
         Quaternion m_ReadyFrameRotation;
         const float MaxInferenceFrameAge = .18f;
+        const int ShowcasePhotoMaxSide = 640;
         Quaternion m_ReadbackRotation, m_LastFlowRotation;
         Quaternion m_TrackingRotation, m_DetectionRotation;
         bool m_HasTrackingRotation;
@@ -64,6 +67,7 @@ namespace EarthOL.BodyThrow
 
         public PersonDetectionState State { get; private set; } = PersonDetectionState.Stopped;
         public bool DetectionEnabled => m_Enabled;
+        public bool ShowcaseBuilding => m_ShowcaseBuilding;
         public float DetectionFramesPerSecond { get => detectionFramesPerSecond; set => detectionFramesPerSecond = Mathf.Clamp(value, 1f, 15f); }
         public float FlowFramesPerSecond { get => flowFramesPerSecond; set => flowFramesPerSecond = Mathf.Clamp(value, 5f, 30f); }
         public int CaptureMaxSide { get => captureMaxSide; set => captureMaxSide = Mathf.Clamp(value, 128, 640); }
@@ -73,6 +77,11 @@ namespace EarthOL.BodyThrow
         public int DetectionCount { get; private set; }
         public int CaptureCount { get; private set; }
         public int TensorInputCount { get; private set; }
+        public int DetectionSessionCount { get; private set; }
+        public int TrackingSampleCount => m_TrackingSamples;
+        public float TotalInferenceMilliseconds => m_TotalInference;
+        public float TotalTrackingMilliseconds => m_TotalTracking;
+        public string DiagnosticSessionId => m_DiagnosticSession ?? string.Empty;
         internal bool InferenceRunning => m_Inference != null;
         internal bool CapturePending => m_ReadbackPending;
         public float AverageInferenceMilliseconds => DetectionCount > 0 ? m_TotalInference / DetectionCount : 0f;
@@ -93,31 +102,70 @@ namespace EarthOL.BodyThrow
             m_Tracking = tracking;
         }
 
-        void Start() { if (startOnAwake) StartDetection(); }
+        void Start() { if (startOnAwake) StartDetectionScheduled(); }
 
         public void StartDetection()
         {
-            if (m_Enabled) return;
+            if (!BeginDetectionSession()) return;
+            var load = m_Detector.Load();
+            while (load.MoveNext()) { }
+            CompleteDetectionStart();
+        }
+
+        public void StartDetectionScheduled()
+        {
+            if (!BeginDetectionSession()) return;
+            m_ModelLoadCoroutine = StartCoroutine(LoadDetectionScheduled());
+        }
+
+        bool BeginDetectionSession()
+        {
+            if (m_Enabled) return false;
             m_Enabled = true;
             m_Paused = false;
+            DetectionSessionCount++;
+            m_DiagnosticSession = Guid.NewGuid().ToString("N");
             m_HasTrackingRotation = false;
+            m_LastDetectionStart = -1f;
+            MeasuredDetectionFramesPerSecond = 0f;
             m_AdaptiveRate = detectionFramesPerSecond;
+            m_FrameDeltaAverage = m_NextAdaptiveCheck = 0f;
+            m_ModelLoadStarted = Stopwatch.GetTimestamp();
             m_NextDetection = m_NextFlow = 0f;
             m_Tracking?.ResumeTracks(Time.realtimeSinceStartup);
             m_Detector = new BodyPoseDetector();
             State = PersonDetectionState.LoadingModel;
             if (!m_GcRecorder.Valid) m_GcRecorder = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocated In Frame", 1);
-            var load = m_Detector.Load();
-            while (load.MoveNext()) { }
+            return true;
+        }
+
+        IEnumerator LoadDetectionScheduled()
+        {
+            // Let the mode-button frame and loading status render before creating the Sentis worker.
+            yield return null;
+            var load = m_Detector.Load(scheduled: true);
+            while (load.MoveNext()) yield return load.Current;
+            m_ModelLoadCoroutine = null;
+            CompleteDetectionStart();
+        }
+
+        void CompleteDetectionStart()
+        {
             State = m_Detector.Ready ? PersonDetectionState.WaitingForCamera : PersonDetectionState.Error;
             if (!m_Detector.Ready) m_Enabled = false;
-            RecordDiagnostic(m_Enabled ? "start" : "model_error");
+            RecordDiagnostic(m_Enabled ? "start" : "model_error", elapsedMs: Elapsed(m_ModelLoadStarted),
+                error: m_Detector.Error);
             Debug.Log($"[PersonDetection] Start: YOLO cap={detectionFramesPerSecond:F1}Hz flow={flowFramesPerSecond:F0}Hz");
         }
 
         public void StopDetection()
         {
             m_Enabled = false;
+            if (m_ModelLoadCoroutine != null)
+            {
+                StopCoroutine(m_ModelLoadCoroutine);
+                m_ModelLoadCoroutine = null;
+            }
             DetectionStopping?.Invoke();
             DisposeInference();
             m_Detector?.Dispose(); m_Detector = null;
@@ -138,16 +186,33 @@ namespace EarthOL.BodyThrow
         {
             if (m_ShowcaseBuilding == building) return;
             m_ShowcaseBuilding = building;
-            m_ReadyFrameTimestamp = -1f;
+            if (building)
+            {
+                m_ReadyFrameTimestamp = -1f;
+                m_Tracking?.HoldTracks(Time.realtimeSinceStartup);
+                State = PersonDetectionState.BuildingShowcase;
+            }
+            else
+            {
+                m_Tracking?.ResumeHeldTracks(Time.realtimeSinceStartup);
+                State = m_Tracking != null && m_Tracking.Count > 0
+                    ? PersonDetectionState.Running : PersonDetectionState.SearchingForPeople;
+            }
             if (!building)
             {
-                m_NextDetection = Time.realtimeSinceStartup + .10f;
-                m_NextFlow = m_NextDetection;
+                RequestFreshDetection();
             }
         }
 
+        internal void RequestFreshDetection()
+        {
+            m_ReadyFrameTimestamp = -1f;
+            m_HasPreviousGray = false;
+            m_NextDetection = m_NextFlow = 0f;
+        }
+
         public bool ShouldStartInference(float now) => m_Enabled && m_Inference == null &&
-            !m_Paused && !m_ShowcaseBuilding && now >= m_NextDetection;
+            m_Detector != null && m_Detector.Ready && !m_Paused && !m_ShowcaseBuilding && now >= m_NextDetection;
 
         void Update()
         {
@@ -175,8 +240,16 @@ namespace EarthOL.BodyThrow
             using (TrackMarker.Auto()) m_Tracking?.Tick(now);
             LastTrackingMilliseconds = Elapsed(started);
             m_TotalTracking += LastTrackingMilliseconds; m_TrackingSamples++;
+            if (m_ModelLoadCoroutine != null || m_Detector == null || !m_Detector.Ready)
+            {
+                State = PersonDetectionState.LoadingModel;
+                return;
+            }
             if (m_Camera == null || m_Background == null || !m_Background.backgroundRenderingEnabled || m_Background.material == null)
-            { State = PersonDetectionState.WaitingForCamera; return; }
+            {
+                State = m_ShowcaseBuilding ? PersonDetectionState.BuildingShowcase : PersonDetectionState.WaitingForCamera;
+                return;
+            }
             UpdateMobileBudget(now);
 
             try
@@ -202,7 +275,7 @@ namespace EarthOL.BodyThrow
                     if (!pending) DisposeInference();
                 }
                 now = Time.realtimeSinceStartup;
-                bool underPressure = adaptiveMobileBudget && m_FrameDeltaAverage > .040f;
+                bool underPressure = adaptiveMobileBudget && m_FrameDeltaAverage > TargetFrameSeconds * 1.2f;
                 bool flowDue = now >= m_NextFlow && TrackedPersonCount > 0;
                 bool prefetch = !underPressure && m_UseAsyncReadback && now >= m_NextDetection - .10f &&
                     (m_ReadyFrameTimestamp <= m_LastDetectionStart || now - m_ReadyFrameTimestamp >= .10f);
@@ -223,12 +296,14 @@ namespace EarthOL.BodyThrow
                     RequestCapture();
                     m_LastCaptureWorkMs += Elapsed(captureStart);
                 }
-                State = PersonDetectionState.Running;
+                State = m_ShowcaseBuilding ? PersonDetectionState.BuildingShowcase :
+                    m_Tracking != null && m_Tracking.Count > 0
+                        ? PersonDetectionState.Running : PersonDetectionState.SearchingForPeople;
             }
             catch (Exception exception)
             {
                 Debug.LogException(exception);
-                RecordDiagnostic("detection_error", flush: true);
+                RecordDiagnostic("detection_error", flush: true, error: exception.ToString());
                 StopDetection(); State = PersonDetectionState.Error;
             }
             if (now >= m_NextLog)
@@ -244,13 +319,16 @@ namespace EarthOL.BodyThrow
             }
         }
 
+        static float TargetFrameSeconds => 1f / (Application.targetFrameRate > 0 ? Application.targetFrameRate : 30);
+
         void UpdateMobileBudget(float now)
         {
-            if (!adaptiveMobileBudget || now < m_NextAdaptiveCheck) return;
+            if (!adaptiveMobileBudget || m_ShowcaseBuilding || now < m_NextAdaptiveCheck) return;
             m_NextAdaptiveCheck = now + 3f;
-            float frameMs = m_FrameDeltaAverage * 1000f;
-            if (frameMs > 34f || AverageInferenceMilliseconds > 230f) m_AdaptiveRate = Mathf.Max(1.5f, m_AdaptiveRate - 0.5f);
-            else if (frameMs < 29f && AverageInferenceMilliseconds > 0f && AverageInferenceMilliseconds < 150f)
+            float target = TargetFrameSeconds;
+            if (m_FrameDeltaAverage > target * 1.2f)
+                m_AdaptiveRate = Mathf.Max(Mathf.Min(1.5f, detectionFramesPerSecond), m_AdaptiveRate - .5f);
+            else if (m_FrameDeltaAverage > 0f && m_FrameDeltaAverage <= target * 1.08f)
                 m_AdaptiveRate = Mathf.Min(detectionFramesPerSecond, m_AdaptiveRate + 0.25f);
         }
 
@@ -289,17 +367,19 @@ namespace EarthOL.BodyThrow
         [Serializable]
         sealed class RecognitionDiagnostic
         {
-            public string utc, stage, session, poseModel;
+            public string utc, stage, session, poseModel, inferenceBackend, segmentationBackend, error;
             public int sequence, detections, personId, width, height, vertices, foregroundPixels, flowRejections, flowTracking, flowMatches, singleRecoveries;
             public int[] visibleIds;
             public bool asyncReadback;
-            public float elapsedMs, captureMs, queueMs, inferenceMs, decodeMs, segmentationMs, meshMs, depth, frameMaxMs, scheduleMaxMs, readbackLatencyMs, flowCameraDegrees;
+            public float elapsedMs, captureMs, queueMs, inferenceMs, decodeMs, segmentationMs, composeMs, meshMs, depth, frameMaxMs, scheduleMaxMs, readbackLatencyMs, flowCameraDegrees;
         }
 
         internal void RecordDiagnostic(string stage, int detections = -1, float elapsedMs = 0f,
             int personId = -1, int width = 0, int height = 0, int vertices = 0, float depth = 0f,
-            int foregroundPixels = 0, float captureMs = 0f, float segmentationMs = 0f, float meshMs = 0f, bool flush = false,
-            float queueMs = 0f, float inferenceMs = 0f, float decodeMs = 0f)
+            int foregroundPixels = 0, float captureMs = 0f, float segmentationMs = 0f, float composeMs = 0f,
+            float meshMs = 0f, bool flush = false,
+            float queueMs = 0f, float inferenceMs = 0f, float decodeMs = 0f, string error = null,
+            string segmentationBackend = null)
         {
             if (!Application.isMobilePlatform || m_DiagnosticsUnavailable) return;
             try
@@ -316,11 +396,14 @@ namespace EarthOL.BodyThrow
                 m_Diagnostics.WriteLine(JsonUtility.ToJson(new RecognitionDiagnostic
                 {
                     utc = DateTime.UtcNow.ToString("O"), stage = stage, session = m_DiagnosticSession,
-                    poseModel = m_Detector?.ModelName, sequence = DetectionCount,
+                    poseModel = m_Detector?.ModelName, inferenceBackend = m_Detector?.BackendName,
+                    segmentationBackend = segmentationBackend,
+                    error = string.IsNullOrEmpty(error) ? string.Empty : error.Substring(0, Mathf.Min(error.Length, 1024)),
+                    sequence = DetectionCount,
                     detections = detections, visibleIds = ids, personId = personId, width = width, height = height,
                     vertices = vertices, depth = depth, foregroundPixels = foregroundPixels, elapsedMs = elapsedMs,
                     captureMs = captureMs, queueMs = queueMs, inferenceMs = inferenceMs, decodeMs = decodeMs,
-                    segmentationMs = segmentationMs, meshMs = meshMs,
+                    segmentationMs = segmentationMs, composeMs = composeMs, meshMs = meshMs,
                     asyncReadback = m_UseAsyncReadback, frameMaxMs = m_MaxFrameMilliseconds,
                     scheduleMaxMs = m_MaxScheduleMilliseconds, readbackLatencyMs = AverageReadbackLatencyMilliseconds,
                     flowRejections = m_Tracking?.FlowRejectionCount ?? 0,
@@ -504,10 +587,7 @@ namespace EarthOL.BodyThrow
             int sourceWidth = m_Camera.pixelWidth;
             int sourceHeight = m_Camera.pixelHeight;
             if (sourceWidth <= 0 || sourceHeight <= 0) return false;
-            bool lowMemory = SystemInfo.graphicsDeviceName.IndexOf("Mali", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                SystemInfo.systemMemorySize <= 6000;
-            int maxSide = lowMemory ? 768 : 1024;
-            float scale = Mathf.Min(1f, maxSide / (float)Mathf.Max(sourceWidth, sourceHeight));
+            float scale = Mathf.Min(1f, ShowcasePhotoMaxSide / (float)Mathf.Max(sourceWidth, sourceHeight));
             int captureWidth = Mathf.Max(1, Mathf.RoundToInt(sourceWidth * scale));
             int captureHeight = Mathf.Max(1, Mathf.RoundToInt(sourceHeight * scale));
             var target = new RenderTexture(captureWidth, captureHeight, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB)
@@ -584,10 +664,7 @@ namespace EarthOL.BodyThrow
                 completed?.Invoke(null, default);
                 yield break;
             }
-            bool lowMemory = SystemInfo.graphicsDeviceName.IndexOf("Mali", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                SystemInfo.systemMemorySize <= 6000;
-            int maxSide = lowMemory ? 768 : 1024;
-            float scale = Mathf.Min(1f, maxSide / (float)Mathf.Max(sourceWidth, sourceHeight));
+            float scale = Mathf.Min(1f, ShowcasePhotoMaxSide / (float)Mathf.Max(sourceWidth, sourceHeight));
             int captureWidth = Mathf.Max(1, Mathf.RoundToInt(sourceWidth * scale));
             int captureHeight = Mathf.Max(1, Mathf.RoundToInt(sourceHeight * scale));
             var target = new RenderTexture(captureWidth, captureHeight, 0,

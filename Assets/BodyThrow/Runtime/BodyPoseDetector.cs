@@ -42,12 +42,23 @@ namespace EarthOL.BodyThrow
         public string Error { get; private set; }
         public float LastDecodeMilliseconds { get; private set; }
         public string ModelName => m_UseYolo26 ? "yolo26n-pose-raw" : "yolov8n-pose-raw";
+        public string BackendName => m_Worker != null ? m_Worker.backendType.ToString() : "Unavailable";
 
         public BodyPoseDetector(bool useYolo26 = true) => m_UseYolo26 = useYolo26;
 
-        public IEnumerator Load()
+        public IEnumerator Load() => Load(false);
+
+        internal IEnumerator Load(bool scheduled)
         {
-            var modelAsset = Resources.Load<ModelAsset>("Models/" + ModelName);
+            string path = "Models/" + ModelName;
+            ModelAsset modelAsset;
+            if (scheduled)
+            {
+                var request = Resources.LoadAsync<ModelAsset>(path);
+                yield return request;
+                modelAsset = request.asset as ModelAsset;
+            }
+            else modelAsset = Resources.Load<ModelAsset>(path);
             if (modelAsset == null)
             {
                 Error = "找不到姿态模型 " + ModelName;
@@ -96,14 +107,16 @@ namespace EarthOL.BodyThrow
                 return System.Array.Empty<BodyPoseResult>();
 
             SnapshotAppearanceFrame(pixels, width, height);
-            var input = BuildInput(pixels, width, height);
-            m_Worker.Schedule(input);
-            var boxes = m_Worker.PeekOutput("boxes_raw") as Tensor<float>;
-            var scores = m_Worker.PeekOutput("scores_raw") as Tensor<float>;
-            var pose = m_Worker.PeekOutput("pose_raw") as Tensor<float>;
-            if (boxes == null || scores == null || pose == null)
-                return System.Array.Empty<BodyPoseResult>();
-            DecodeOutputs(boxes, scores, pose);
+            using (var input = BuildInput(pixels, width, height))
+            {
+                m_Worker.Schedule(input);
+                var boxes = m_Worker.PeekOutput("boxes_raw") as Tensor<float>;
+                var scores = m_Worker.PeekOutput("scores_raw") as Tensor<float>;
+                var pose = m_Worker.PeekOutput("pose_raw") as Tensor<float>;
+                if (boxes == null || scores == null || pose == null)
+                    return System.Array.Empty<BodyPoseResult>();
+                DecodeOutputsWithCpuFallback(input, boxes, scores, pose);
+            }
 
             return SelectResults(maxResults);
         }
@@ -115,34 +128,171 @@ namespace EarthOL.BodyThrow
             SnapshotAppearanceFrame(pixels, width, height);
             var input = BuildInput(pixels, width, height);
             {
-                var schedule = m_Worker.ScheduleIterable(input);
-                long start = System.Diagnostics.Stopwatch.GetTimestamp();
-                while (schedule.MoveNext())
-                {
-                    double milliseconds = (System.Diagnostics.Stopwatch.GetTimestamp() - start) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
-                    if (milliseconds < 4.0) continue;
-                    yield return null;
-                    start = System.Diagnostics.Stopwatch.GetTimestamp();
-                }
+                yield return null;
+                foreach (var step in ScheduleInference(m_Worker, input)) yield return step;
                 var boxes = m_Worker.PeekOutput("boxes_raw") as Tensor<float>;
                 var scores = m_Worker.PeekOutput("scores_raw") as Tensor<float>;
                 var pose = m_Worker.PeekOutput("pose_raw") as Tensor<float>;
                 if (boxes == null || scores == null || pose == null)
                     throw new System.InvalidOperationException("YOLO pose model did not return all expected outputs.");
-                boxes.ReadbackRequest();
-                scores.ReadbackRequest();
-                pose.ReadbackRequest();
-                while (!boxes.IsReadbackRequestDone() || !scores.IsReadbackRequestDone() || !pose.IsReadbackRequestDone())
+                var outputs = new[] { boxes, scores, pose };
+                var copies = new Tensor<float>[outputs.Length];
+                try
                 {
-                    yield return null;
+                    System.InvalidOperationException readbackFailure = null;
+                    foreach (var step in ReadOutputs(outputs, copies, error => readbackFailure = error)) yield return step;
+                    if (readbackFailure != null)
+                    {
+                        if (!ShouldFallbackToCpu(m_Worker.backendType, readbackFailure)) throw readbackFailure;
+                        LogCpuFallback(readbackFailure);
+                        DisposeOutputs(copies);
+                        SwitchToCpuBackend();
+                        foreach (var step in ScheduleInference(m_Worker, input)) yield return step;
+                        outputs[0] = m_Worker.PeekOutput("boxes_raw") as Tensor<float>;
+                        outputs[1] = m_Worker.PeekOutput("scores_raw") as Tensor<float>;
+                        outputs[2] = m_Worker.PeekOutput("pose_raw") as Tensor<float>;
+                        foreach (var step in ReadOutputs(outputs, copies, error => readbackFailure = error)) yield return step;
+                        if (readbackFailure != null) throw readbackFailure;
+                    }
+                    long decodeStart = System.Diagnostics.Stopwatch.GetTimestamp();
+                    Decode(copies[0], copies[1], copies[2]);
+                    var results = SelectResults(maxResults);
+                    LastDecodeMilliseconds = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - decodeStart) *
+                        1000.0 / System.Diagnostics.Stopwatch.Frequency);
+                    completed(results);
                 }
-                long decodeStart = System.Diagnostics.Stopwatch.GetTimestamp();
-                DecodeOutputs(boxes, scores, pose);
-                var results = SelectResults(maxResults);
-                LastDecodeMilliseconds = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - decodeStart) *
-                    1000.0 / System.Diagnostics.Stopwatch.Frequency);
-                completed(results);
+                finally
+                {
+                    DisposeOutputs(copies);
+                }
             }
+        }
+
+        internal static IEnumerable ScheduleInference(Worker worker, Tensor<float> input)
+        {
+            var schedule = worker.ScheduleIterable(input);
+            var slice = System.Diagnostics.Stopwatch.StartNew();
+            while (schedule.MoveNext())
+            {
+                if (slice.ElapsedMilliseconds < 4) continue;
+                yield return null;
+                slice.Restart();
+            }
+        }
+
+        internal static IEnumerable ReadOutputs(Tensor<float>[] outputs, Tensor<float>[] copies,
+            System.Action<System.InvalidOperationException> failed)
+        {
+            failed(null);
+            foreach (var output in outputs)
+                if (output == null) throw new System.InvalidOperationException("Missing model output tensor.");
+
+            int remaining = outputs.Length;
+            bool requested = false;
+            while (remaining > 0)
+            {
+                System.InvalidOperationException failure = null;
+                try
+                {
+                    // Read each completed request in the frame it becomes available.
+                    if (!requested)
+                        foreach (var output in outputs) output.ReadbackRequest();
+                    requested = true;
+                    for (int i = 0; i < outputs.Length; i++)
+                    {
+                        if (copies[i] != null || !outputs[i].IsReadbackRequestDone()) continue;
+                        copies[i] = outputs[i].ReadbackAndClone();
+                        remaining--;
+                    }
+                }
+                catch (System.InvalidOperationException exception) { failure = exception; }
+                if (failure != null)
+                {
+                    failed(failure);
+                    yield break;
+                }
+                if (remaining > 0) yield return null;
+            }
+        }
+
+        internal static void DisposeOutputs(Tensor<float>[] outputs)
+        {
+            for (int i = 0; i < outputs.Length; i++)
+            {
+                outputs[i]?.Dispose();
+                outputs[i] = null;
+            }
+        }
+
+        internal static bool ShouldFallbackToCpu(BackendType backend, System.Exception exception) =>
+            backend == BackendType.GPUCompute && exception is System.InvalidOperationException;
+
+        void DecodeOutputsWithCpuFallback(Tensor<float> input, Tensor<float> boxes,
+            Tensor<float> scores, Tensor<float> pose)
+        {
+            Tensor<float> cpuBoxes = null;
+            Tensor<float> cpuScores = null;
+            Tensor<float> cpuPose = null;
+            try
+            {
+                System.InvalidOperationException readbackFailure = null;
+                try
+                {
+                    cpuBoxes = boxes.ReadbackAndClone();
+                    cpuScores = scores.ReadbackAndClone();
+                    cpuPose = pose.ReadbackAndClone();
+                }
+                catch (System.InvalidOperationException exception)
+                {
+                    DisposeTensor(cpuBoxes);
+                    DisposeTensor(cpuScores);
+                    DisposeTensor(cpuPose);
+                    cpuBoxes = cpuScores = cpuPose = null;
+                    readbackFailure = exception;
+                }
+
+                if (readbackFailure != null)
+                {
+                    if (!ShouldFallbackToCpu(m_Worker.backendType, readbackFailure)) throw readbackFailure;
+                    LogCpuFallback(readbackFailure);
+                    SwitchToCpuBackend();
+                    m_Worker.Schedule(input);
+                    boxes = m_Worker.PeekOutput("boxes_raw") as Tensor<float>;
+                    scores = m_Worker.PeekOutput("scores_raw") as Tensor<float>;
+                    pose = m_Worker.PeekOutput("pose_raw") as Tensor<float>;
+                    if (boxes == null || scores == null || pose == null)
+                        throw new System.InvalidOperationException("CPU retry did not return all expected YOLO pose outputs.");
+                    cpuBoxes = boxes.ReadbackAndClone();
+                    cpuScores = scores.ReadbackAndClone();
+                    cpuPose = pose.ReadbackAndClone();
+                }
+
+                Decode(cpuBoxes, cpuScores, cpuPose);
+            }
+            finally
+            {
+                DisposeTensor(cpuBoxes);
+                DisposeTensor(cpuScores);
+                DisposeTensor(cpuPose);
+            }
+        }
+
+        static void LogCpuFallback(System.InvalidOperationException exception)
+        {
+            Debug.LogWarning("[Pose] GPU output readback failed. Switching to CPU and retrying this frame once. " +
+                exception.Message);
+        }
+
+        void SwitchToCpuBackend()
+        {
+            var previous = m_Worker;
+            m_Worker = new Worker(m_Model, BackendType.CPU);
+            previous.Dispose();
+        }
+
+        static void DisposeTensor(Tensor<float> tensor)
+        {
+            tensor?.Dispose();
         }
 
         BodyPoseResult[] SelectResults(int maxResults)
@@ -212,14 +362,6 @@ namespace EarthOL.BodyThrow
 
             m_Input.Upload(data);
             return m_Input;
-        }
-
-        void DecodeOutputs(Tensor<float> boxes, Tensor<float> scores, Tensor<float> pose)
-        {
-            using var cpuBoxes = boxes.ReadbackAndClone();
-            using var cpuScores = scores.ReadbackAndClone();
-            using var cpuPose = pose.ReadbackAndClone();
-            Decode(cpuBoxes, cpuScores, cpuPose);
         }
 
         void Decode(Tensor<float> boxes, Tensor<float> scores, Tensor<float> pose)

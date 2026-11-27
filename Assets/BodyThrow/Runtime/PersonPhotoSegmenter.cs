@@ -28,13 +28,16 @@ namespace EarthOL.BodyThrow
         }
 
         readonly List<Candidate> m_Candidates = new List<Candidate>(MaxCandidates);
+        Model m_Model;
         Worker m_Worker;
+        bool m_UseCpu;
+        public string BackendName => m_Worker?.backendType.ToString();
 
         public IEnumerator SegmentScheduled(Texture2D photo, PersonPoseData person, Rect photoBounds,
             Action<byte[]> completed)
         {
             byte[] alpha = null;
-            var cpuHeads = new Tensor<float>[Outputs.Length];
+            var copies = new Tensor<float>[Outputs.Length + 1];
             try
             {
                 if (m_Worker == null)
@@ -46,50 +49,44 @@ namespace EarthOL.BodyThrow
                         completed?.Invoke(null);
                         yield break;
                     }
-                    m_Worker = BodyPoseDetector.CreateInferenceWorker(ModelLoader.Load(asset));
+                    m_Model ??= ModelLoader.Load(asset);
+                    m_Worker = m_UseCpu ? new Worker(m_Model, BackendType.CPU) :
+                        BodyPoseDetector.CreateInferenceWorker(m_Model);
                 }
 
                 using (var input = BuildInput(photo, out Rect image))
                 {
-                    var schedule = m_Worker.ScheduleIterable(input);
-                    long scheduleStart = System.Diagnostics.Stopwatch.GetTimestamp();
-                    while (schedule.MoveNext())
+                    var outputs = new Tensor<float>[copies.Length];
+                    while (true)
                     {
-                        double milliseconds = (System.Diagnostics.Stopwatch.GetTimestamp() - scheduleStart) *
-                            1000.0 / System.Diagnostics.Stopwatch.Frequency;
-                        if (milliseconds < 4.0) continue;
-                        yield return null;
-                        scheduleStart = System.Diagnostics.Stopwatch.GetTimestamp();
+                        foreach (var step in BodyPoseDetector.ScheduleInference(m_Worker, input)) yield return step;
+                        for (int i = 0; i < Outputs.Length; i++)
+                            outputs[i] = m_Worker.PeekOutput(Outputs[i]) as Tensor<float>;
+                        outputs[Outputs.Length] = m_Worker.PeekOutput("prototypes") as Tensor<float>;
+                        InvalidOperationException failure = null;
+                        foreach (var step in BodyPoseDetector.ReadOutputs(outputs, copies, error => failure = error))
+                            yield return step;
+                        if (failure == null) break;
+                        if (!BodyPoseDetector.ShouldFallbackToCpu(m_Worker.backendType, failure)) throw failure;
+
+                        Debug.LogWarning("[PersonShowcase] GPU segmentation readback failed. Retrying on CPU. " + failure.Message);
+                        BodyPoseDetector.DisposeOutputs(copies);
+                        Dispose();
+                        m_UseCpu = true;
+                        m_Worker = new Worker(m_Model, BackendType.CPU);
                     }
-                    var outputs = new Tensor<float>[Outputs.Length + 1];
-                    for (int i = 0; i < Outputs.Length; i++) outputs[i] = m_Worker.PeekOutput(Outputs[i]) as Tensor<float>;
-                    outputs[Outputs.Length] = m_Worker.PeekOutput("prototypes") as Tensor<float>;
-                    foreach (Tensor<float> output in outputs)
-                        if (output == null) throw new InvalidOperationException("Missing segmentation output.");
-                    foreach (Tensor<float> output in outputs) output.ReadbackRequest();
-                    do
-                    {
-                        bool ready = true;
-                        foreach (Tensor<float> output in outputs) ready &= output.IsReadbackRequestDone();
-                        if (!ready) yield return null;
-                        else break;
-                    }
-                    while (true);
 
                     Rect target = ToModelRect(person.screenRect, photoBounds, image);
                     m_Candidates.Clear();
                     for (int i = 0; i < Strides.Length; i++)
-                    {
-                        cpuHeads[i] = outputs[i].ReadbackAndClone();
-                        ReadCandidates(cpuHeads[i], Strides[i], target);
-                    }
+                        ReadCandidates(copies[i], Strides[i], target);
                     if (m_Candidates.Count == 0)
                     {
                         completed?.Invoke(null);
                         yield break;
                     }
 
-                    using var prototypes = outputs[Outputs.Length].ReadbackAndClone();
+                    var prototypes = copies[Outputs.Length];
                     CheckShape(prototypes, PrototypeSize, MaskChannels);
                     var prototypeData = prototypes.AsReadOnlyNativeArray();
                     float[] bestMask = null;
@@ -123,7 +120,7 @@ namespace EarthOL.BodyThrow
             finally
             {
                 m_Candidates.Clear();
-                foreach (var head in cpuHeads) head?.Dispose();
+                BodyPoseDetector.DisposeOutputs(copies);
             }
         }
 
