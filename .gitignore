@@ -1,0 +1,36 @@
+# Unity generated folders
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Tt]est[Rr]esults/
+[Mm]emoryCaptures/
+
+# IDE and editor generated files
+.vs/
+*.csproj
+*.sln
+*.csproj.user
+*.pidb
+*.suo
+*.user
+*.userprefs
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Unity crash reports
+sysinfo.txt
+
+# Vuforia ��װ������⣨manifest �� scoped registry ������
+Packages/com.ptc.vuforia.engine-*.tgz
+
+# ģ��Ȩ�ز���⣺�� tools/export_model.ps1 �� README ����������µ���
+
+# 构建产物与 Burst 调试信息，不进入版本控制
+*.apk
+/My project_BurstDebugInformation_DoNotShip/
